@@ -1,0 +1,15 @@
+[workspace]
+
+members = [
+    "rubicon",
+]
+
+[workspace.dependencies]
+ethers = { version="*", features=["abigen"] }
+tracing = "*"
+
+
+
+
+#[features]
+#erc20 = []
