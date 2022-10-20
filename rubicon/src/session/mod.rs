@@ -4,11 +4,13 @@ use anyhow::{anyhow, Result};
 
 use ethers::{
     contract::Contract,
+    abi::Detokenize,
     core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
-    prelude::{EthEvent, PubsubClient},
+    prelude::{EthEvent, PubsubClient, builders::ContractCall},
     providers::{Middleware, StreamExt},
 };
 use numeraire::prelude::*;
+use futures::Future;
 
 use postage::{
     broadcast,
@@ -27,6 +29,10 @@ use tracing::{event, instrument, Level};
  *      ERROR is used for errors that will likely result in the death of the program
  */
 
+type TxResult = Result<Option<TransactionReceipt>>;
+trait FutTxResult: Future<Output=TxResult> {}
+
+
 pub struct RubiconSession<M: Middleware + Clone + 'static> {
     chain: Chain,
     rbcn_market: Contract<M>,
@@ -35,72 +41,6 @@ pub struct RubiconSession<M: Middleware + Clone + 'static> {
     market_aid: Option<Contract<M>>,
     router: Contract<M>,
     _internal_middleware: Arc<M>, // we just keep this around to clone if we build new contracts
-}
-
-/// really, we want this to represent any change of assets
-/// e.g. the fill on a market order - exchanging `source` for `target`
-/// IRL, this should maybe be some vectors of ChainNativeAssets
-/// this can also represent a limit order - we're locking up src amount of the src asset in exchange for at least target amount of the target asset
-#[derive(Debug, Clone)]
-pub struct AssetSwap {
-    source: ChainNativeAsset, // this is what we gave up
-    target: ChainNativeAsset, // this is what we got
-}
-
-impl AssetSwap {
-    pub fn new(source: ChainNativeAsset, target: ChainNativeAsset) -> Self {
-        Self { source, target }
-    }
-
-    pub fn new_from_primitive(
-        chain: Chain,
-        source_asset: Asset,
-        target_asset: Asset,
-        source_size: U256,
-        target_size: U256,
-    ) -> Result<Self> {
-        Ok(Self {
-            source: ChainNativeAsset::new(chain, source_asset, source_size)?,
-            target: ChainNativeAsset::new(chain, target_asset, target_size)?,
-        })
-    }
-
-    pub fn source(&self) -> &ChainNativeAsset {
-        &self.source
-    }
-
-    pub fn target(&self) -> &ChainNativeAsset {
-        &self.target
-    }
-
-    pub fn summarize_hex(&self) {
-        println!(
-            "{}-{}:0x{} => {}-{}:0x{}",
-            self.source.chain(),
-            self.source.asset(),
-            self.source.to_hex_string(),
-            self.target.chain(),
-            self.target.asset(),
-            self.target.to_hex_string()
-        );
-    }
-
-    pub fn summarize_base64(&self) {
-        println!(
-            "{}-{}:{} => {}-{}:{}",
-            self.source.chain(),
-            self.source.asset(),
-            self.source.to_base64_string(),
-            self.target.chain(),
-            self.target.asset(),
-            self.target.to_base64_string()
-        );
-    }
-
-    // does this represent a swap within a single chain, or is it cross-chain?
-    pub fn is_local_to_chain(&self) -> bool {
-        self.source.chain() == self.target.chain()
-    }
 }
 
 impl<M: Middleware + Clone + 'static> RubiconSession<M> {
@@ -156,6 +96,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         self._internal_middleware = a;
     }
 
+    // Getter functions, and some small helper functions
     pub fn market(&self) -> &Contract<M> {
         &self.rbcn_market
     }
@@ -176,14 +117,17 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         &self.chain
     }
 
+    /// Market Aid isn't deployed on Kovan and Goerli - we can't always depend on it being there
     pub fn market_aid(&self) -> Option<&Contract<M>> {
         self.market_aid.as_ref()
     }
 
+    /// Address associated with the current middleware, if it exists. 
     pub fn get_address(&self) -> Option<Address> {
         self._internal_middleware.default_sender()
     }
 
+    /// Are we on a legacy chain (pre EIP-1559)? If so, we have to use legacy TX calls...
     pub fn is_legacy(&self) -> bool {
         self.chain().is_legacy()
     }
@@ -201,7 +145,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         buy_amt: U256,
         pay_gem: Address,
         max_fill_amount: U256,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .market()
@@ -248,7 +192,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         pay_amt: U256,
         buy_gem: Address,
         min_fill_amount: U256,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .market()
@@ -301,7 +245,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         buy_amt: U256,
         buy_gem: Address,
         pos: Option<U256>,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let internal_position = pos.unwrap_or(U256::zero());
 
         let tx = if self.is_legacy() {
@@ -341,9 +285,52 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok(receipt)
     }
 
+    async fn handle_contract_call<T: Detokenize>(&self, call: ContractCall<M, T>) -> TxResult{
+        let receipt = match call.send().await?.await {
+            Ok(x) => x,
+            Err(e) => {
+                event!(
+                    Level::WARN,
+                    "[handle_contract_call]: failed to get receipt with error: {}",
+                    e
+                );
+                return Err(e.into());
+            }
+        };
+
+        Ok(receipt)
+    }
+
+    fn offer_v2(
+        &self,
+        pay_amt: U256,
+        pay_gem: Address,
+        buy_amt: U256,
+        buy_gem: Address,
+        pos: Option<U256>,
+    ) -> Result<(ContractCall<M,U256>, impl Future<Output=TxResult> + '_)> {
+        let internal_position = pos.unwrap_or(U256::zero());
+
+        let tx = if self.is_legacy() {
+            self.market()
+                .method::<_, U256>(
+                    "offer",
+                    (pay_amt, pay_gem, buy_amt, buy_gem, internal_position),
+                )?
+                .legacy()
+        } else {
+            self.market().method::<_, U256>(
+                "offer",
+                (pay_amt, pay_gem, buy_amt, buy_gem, internal_position),
+            )?
+        };
+
+        Ok((tx.clone(), self.handle_contract_call(tx)))
+    }
+
     /// eventually this should terminate in a bool...
     #[instrument(level = "debug", skip(self))]
-    async fn cancel(&self, order_id: U256) -> Result<Option<TransactionReceipt>> {
+    async fn cancel(&self, order_id: U256) -> TxResult {
         let tx = if self.is_legacy() {
             self.market()
                 .method::<_, U256>("cancel", (order_id,))?
@@ -550,7 +537,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dem: U256,
         bid_num: U256,
         bid_dem: U256,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -603,7 +590,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dems: Vec<U256>,
         bid_nums: Vec<U256>,
         bid_dems: Vec<U256>,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         if !(ask_nums.len() == ask_dems.len() && bid_nums.len() == bid_dems.len()) {
             // there's some mismatch in the input values...
             // we should return an error and log it
@@ -669,7 +656,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dem: U256,
         bid_num: U256,
         bid_dem: U256,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -724,7 +711,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dems: Vec<U256>,
         bid_nums: Vec<U256>,
         bid_dems: Vec<U256>,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         if !(ask_nums.len() == ask_dems.len()
             && bid_nums.len() == bid_dems.len()
             && ask_nums.len() == ids.len())
@@ -786,7 +773,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    async fn scrub_strategist_trade(&self, trade_id: U256) -> Result<Option<TransactionReceipt>> {
+    async fn scrub_strategist_trade(&self, trade_id: U256) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -829,7 +816,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     async fn scrub_strategist_trades(
         &self,
         trade_ids: Vec<U256>,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -879,7 +866,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         amount: U256,
         hurdle: U256,
         pool_fee: u32,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -947,7 +934,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         fees: Vec<u32>,
         hurdle: U256,
         strat_util: Address,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -997,7 +984,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         quote_rebal_amt: U256,
         underlying_asset: Address,
         underlying_quote: Address,
-    ) -> Result<Option<TransactionReceipt>> {
+    ) -> TxResult {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -1238,7 +1225,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // this has no output
     #[instrument(level = "info", skip(self))]
-    pub async fn s_rebalance_swap(&self, swap: AssetSwap) -> Result<Option<TransactionReceipt>> {
+    pub async fn s_rebalance_swap(&self, swap: AssetSwap) -> TxResult {
         // first, we've gotta check that the chain is the same for both assets
         if swap.source().chain() != swap.target().chain() {
             event!(

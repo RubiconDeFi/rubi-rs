@@ -4,4 +4,13 @@ Rubicon Rust SDK
 
 ## Risk Disclaimer
 
-## Goals
+## Features
+
+### Beta
+
+-   [ ] Full Rubicon v1.3 support
+
+## Roadmap
+
+-   [ ] ERC-20 support
+-   [ ] Uniswap V3 support
