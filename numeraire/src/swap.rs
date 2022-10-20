@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-use ethers::types::{U256, Chain};
-use anyhow::Result;
 use super::asset::Asset;
 use super::sized_asset::ChainNativeAsset;
+use anyhow::Result;
+use ethers::types::{Chain, U256};
 
 /**
- * This is meant to represent a swap of `source` for `target` tokens. We can use it in many ways: 
- * for example, it could represent fill that occured in the past, or it could represent the 
+ * This is meant to represent a swap of `source` for `target` tokens. We can use it in many ways:
+ * for example, it could represent fill that occured in the past, or it could represent the
  * constraint of a limit order to be filled in the future (i.e. at least `target` tokens for `source` tokens).
  */
 #[derive(Debug, Clone)]
