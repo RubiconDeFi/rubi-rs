@@ -12,14 +12,13 @@ use ethers::{
 use futures::Future;
 use numeraire::prelude::*;
 
-use postage::{
-    broadcast,
-    sink::{SendError, Sink},
-};
 use std::convert::Into;
 
 use std::sync::Arc;
 use tracing::{event, instrument, Level};
+
+#[cfg(feature = "streaming")]
+mod streaming;
 
 /*
  * TRACING METHODOLOGY:
@@ -550,7 +549,10 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    fn scrub_strategist_trade(&self, trade_id: U256) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
+    fn scrub_strategist_trade(
+        &self,
+        trade_id: U256,
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -565,7 +567,10 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    fn scrub_strategist_trades(&self, trade_ids: Vec<U256>) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
+    fn scrub_strategist_trades(
+        &self,
+        trade_ids: Vec<U256>,
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -1042,56 +1047,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 }
 
-/*
-impl<M: Middleware + Clone + 'static> RubiconSession<M>
-where
-    <M as Middleware>::Provider: PubsubClient,
-{
-    // should accept a Broadcast<LogBatchRequote> channel
-    pub async fn pair_forward_batch_requotes(
-        &self,
-        sink: broadcast::Sender<events::LogBatchRequoteOffers>,
-    ) {
-        forward_events_stream::<_, events::LogBatchRequoteOffers>(self.pair(), sink).await;
-    }
-
-    // should accept a Broadcast<LogBatchRequote> channel
-    pub async fn pair_forward_id_batch_requotes(
-        &self,
-        sink: broadcast::Sender<(events::LogBatchRequoteOffers, contract_id::ContractType)>,
-    ) {
-        proc_forward_events_stream::<_, events::LogBatchRequoteOffers, _, _>(
-            self.pair(),
-            sink,
-            contract_id::identify_pair,
-        )
-        .await;
-    }
-
-    // should accept a Broadcast<LogBatchRequote> channel
-    pub async fn market_aid_forward_batch_requotes(
-        &self,
-        sink: broadcast::Sender<events::LogBatchRequoteOffers>,
-    ) {
-        forward_events_stream::<_, events::LogBatchRequoteOffers>(self.market_aid().unwrap(), sink)
-            .await;
-    }
-
-    // should accept a Broadcast<LogBatchRequote> channel
-    pub async fn market_aid_forward_id_batch_requotes(
-        &self,
-        sink: broadcast::Sender<(events::LogBatchRequoteOffers, contract_id::ContractType)>,
-    ) {
-        proc_forward_events_stream::<_, events::LogBatchRequoteOffers, _, _>(
-            self.market_aid().unwrap(),
-            sink,
-            contract_id::identify_market_aid,
-        )
-        .await;
-    }
-
-}*/
-
 // some event helper functions
 async fn get_historical_events<M: Middleware + 'static, E: EthEvent>(
     contract: &Contract<M>,
@@ -1106,107 +1061,6 @@ async fn get_historical_events<M: Middleware + 'static, E: EthEvent>(
         (None, None) => event,
     };
     Ok(query.query().await?)
-}
-
-// might reduce overhead in the Tokio scheduler???
-// since we wouldn't have an .await.await, merely an .await
-#[inline]
-async fn forward_events_stream<
-    M: Middleware + 'static,
-    E: EthEvent + Clone + std::fmt::Debug + 'static,
->(
-    contract: &Contract<M>,
-    mut tx: broadcast::Sender<E>,
-) where
-    <M as Middleware>::Provider: PubsubClient,
-{
-    let event = contract.event::<E>();
-    let mut evt_stream = event.subscribe().await.unwrap();
-
-    while let Some(rst_event) = evt_stream.next().await {
-        match rst_event {
-            Ok(new_event) => {
-                if let Err(SendError(failed_event)) = tx.send(new_event.clone()).await {
-                    println!(
-                        "[forward_events_stream]: ERROR: failed to forward event {:?} to channel!",
-                        failed_event
-                    );
-                }
-            }
-            Err(e) => println!("[forward_events_stream]: new event generated error {e}"), // are these fatal???
-        }
-    }
-}
-
-async fn proc_forward_events_stream<
-    M: Middleware + 'static,
-    E: EthEvent + std::fmt::Debug + 'static,
-    T: Clone + std::fmt::Debug,
-    F: Fn(E) -> T,
->(
-    contract: &Contract<M>,
-    mut tx: broadcast::Sender<T>,
-    func: F,
-) where
-    <M as Middleware>::Provider: PubsubClient,
-{
-    let event = contract.event::<E>();
-    let mut evt_stream = event.subscribe().await.unwrap();
-
-    while let Some(rst_event) = evt_stream.next().await {
-        match rst_event {
-            Ok(new_event) => {
-                if let Err(SendError(failed_event)) = tx.send(func(new_event)).await {
-                    println!(
-                        "[forward_events_stream]: ERROR: failed to forward event {:?} to channel!",
-                        failed_event
-                    );
-                }
-            }
-            Err(e) => println!("[forward_events_stream]: new event generated error {e}"), // are these fatal???
-        }
-    }
-}
-
-async fn local_filter_forward_events_stream<
-    M: Middleware + 'static,
-    E: EthEvent + std::fmt::Debug + 'static,
-    T: Clone + std::fmt::Debug,
-    F: Fn(&E) -> Option<T>,
->(
-    contract: &Contract<M>,
-    mut tx: broadcast::Sender<T>,
-    filter: F,
-) where
-    <M as Middleware>::Provider: PubsubClient,
-{
-    let event = contract.event::<E>();
-    let mut evt_stream = event.subscribe().await.unwrap();
-
-    while let Some(rst_event) = evt_stream.next().await {
-        if let Err(e) = rst_event {
-            println!("[forward_events_stream]: new event generated error {e}"); // are these fatal???
-            continue;
-        }
-
-        // now, we know that we've passed the filter
-        // so we should full send it
-
-        match rst_event {
-            Ok(new_event) => {
-                let tmp = filter(&new_event);
-                if let Some(new_event) = tmp {
-                    if let Err(SendError(failed_event)) = tx.send(new_event).await {
-                        println!(
-                            "[forward_events_stream]: ERROR: failed to forward event {:?} to channel!",
-                            failed_event
-                        );
-                    }
-                }
-            }
-            Err(e) => println!("[forward_events_stream]: new event generated error {e}"), // are these fatal???
-        }
-    }
 }
 
 /// we return the amount of `buy_gem` we gained, and the amount of `pay_gem` we spent, in that order
