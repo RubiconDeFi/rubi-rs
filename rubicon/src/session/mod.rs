@@ -3,14 +3,14 @@ use super::events;
 use anyhow::{anyhow, Result};
 
 use ethers::{
-    contract::Contract,
     abi::Detokenize,
+    contract::Contract,
     core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
-    prelude::{EthEvent, PubsubClient, builders::ContractCall},
+    prelude::{builders::ContractCall, EthEvent, PubsubClient},
     providers::{Middleware, StreamExt},
 };
-use numeraire::prelude::*;
 use futures::Future;
+use numeraire::prelude::*;
 
 use postage::{
     broadcast,
@@ -30,8 +30,7 @@ use tracing::{event, instrument, Level};
  */
 
 type TxResult = Result<Option<TransactionReceipt>>;
-trait FutTxResult: Future<Output=TxResult> {}
-
+trait FutTxResult: Future<Output = TxResult> {}
 
 pub struct RubiconSession<M: Middleware + Clone + 'static> {
     chain: Chain,
@@ -122,7 +121,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         self.market_aid.as_ref()
     }
 
-    /// Address associated with the current middleware, if it exists. 
+    /// Address associated with the current middleware, if it exists.
     pub fn get_address(&self) -> Option<Address> {
         self._internal_middleware.default_sender()
     }
@@ -132,160 +131,13 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         self.chain().is_legacy()
     }
 
-    // RUBICON MARKET FUNCTIONS
-
-    // first, we have the raw functions that interact with the contracts on chain
-
-    /// This is a market buy, where we spend no more than max_fill_amount to buy buy_amt
-    /// the returned value is the fill amount
-    #[instrument(level = "debug", skip(self))]
-    async fn buy_all_amount(
-        &self,
-        buy_gem: Address,
-        buy_amt: U256,
-        pay_gem: Address,
-        max_fill_amount: U256,
-    ) -> TxResult {
-        let tx = match self.is_legacy() {
-            true => self
-                .market()
-                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?
-                .legacy(),
-            false => self
-                .market()
-                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?,
-        };
-
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[buy_all_amount]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[buy_all_amount]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-
-        Ok(receipt)
-    }
-
-    /// a market sell, where we spend pay_amt to buy as much as possible of buy_gem (and we get *at least* min_fill_amount)
-    /// the returned value is the filled amount
-    #[instrument(level = "debug", skip(self))]
-    async fn sell_all_amount(
-        &self,
-        pay_gem: Address,
-        pay_amt: U256,
-        buy_gem: Address,
-        min_fill_amount: U256,
-    ) -> TxResult {
-        let tx = match self.is_legacy() {
-            true => self
-                .market()
-                .method::<_, U256>(
-                    "sellAllAmount",
-                    (pay_gem, pay_amt, buy_gem, min_fill_amount),
-                )?
-                .legacy(),
-            false => self.market().method::<_, U256>(
-                "sellAllAmount",
-                (pay_gem, pay_amt, buy_gem, min_fill_amount),
-            )?,
-        };
-
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[sell_all_amount]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[sell_all_amount]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-
-        Ok(receipt)
-    }
-
-    // what if we want to cancel the order before it hits the books tho...
-    // offer to buy
-    // should return the id of the order on the rubicon books
-    #[instrument(level = "debug", skip(self))]
-    async fn offer(
-        &self,
-        pay_amt: U256,
-        pay_gem: Address,
-        buy_amt: U256,
-        buy_gem: Address,
-        pos: Option<U256>,
-    ) -> TxResult {
-        let internal_position = pos.unwrap_or(U256::zero());
-
-        let tx = if self.is_legacy() {
-            self.market()
-                .method::<_, U256>(
-                    "offer",
-                    (pay_amt, pay_gem, buy_amt, buy_gem, internal_position),
-                )?
-                .legacy()
-        } else {
-            self.market().method::<_, U256>(
-                "offer",
-                (pay_amt, pay_gem, buy_amt, buy_gem, internal_position),
-            )?
-        };
-
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(Level::WARN, "[offer]: failed to send tx with error: {}", e);
-                return Err(e.into());
-            }
-        };
-
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[offer]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-
-        Ok(receipt)
-    }
-
-    async fn handle_contract_call<T: Detokenize>(&self, call: ContractCall<M, T>) -> TxResult{
+    // TX HANDLING...
+    /**
+     * This is a helper function that executes a transaction, and waits for a receipt.
+     * By using the (ContractCall<M,D>, Future<...>) model for all of our transactions, we should retain the ability to
+     * cancel stuff in flight, by calling the ContractCall part of the returned tuple again.
+     */
+    async fn handle_contract_call<T: Detokenize>(&self, call: ContractCall<M, T>) -> TxResult {
         let receipt = match call.send().await?.await {
             Ok(x) => x,
             Err(e) => {
@@ -301,14 +153,70 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok(receipt)
     }
 
-    fn offer_v2(
+    // RUBICON MARKET FUNCTIONS
+
+    // first, we have the raw functions that interact with the contracts on chain
+
+    /// This is a market buy, where we spend no more than max_fill_amount to buy buy_amt
+    /// the returned value is the fill amount
+    #[instrument(level = "debug", skip(self))]
+    fn buy_all_amount(
+        &self,
+        buy_gem: Address,
+        buy_amt: U256,
+        pay_gem: Address,
+        max_fill_amount: U256,
+    ) -> Result<(ContractCall<M, U256>, impl Future<Output = TxResult> + '_)> {
+        let tx = match self.is_legacy() {
+            true => self
+                .market()
+                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?
+                .legacy(),
+            false => self
+                .market()
+                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?,
+        };
+        Ok((tx.clone(), self.handle_contract_call(tx)))
+    }
+
+    /// a market sell, where we spend pay_amt to buy as much as possible of buy_gem (and we get *at least* min_fill_amount)
+    /// the returned value is the filled amount
+    #[instrument(level = "debug", skip(self))]
+    fn sell_all_amount(
+        &self,
+        pay_gem: Address,
+        pay_amt: U256,
+        buy_gem: Address,
+        min_fill_amount: U256,
+    ) -> Result<(ContractCall<M, U256>, impl Future<Output = TxResult> + '_)> {
+        let tx = match self.is_legacy() {
+            true => self
+                .market()
+                .method::<_, U256>(
+                    "sellAllAmount",
+                    (pay_gem, pay_amt, buy_gem, min_fill_amount),
+                )?
+                .legacy(),
+            false => self.market().method::<_, U256>(
+                "sellAllAmount",
+                (pay_gem, pay_amt, buy_gem, min_fill_amount),
+            )?,
+        };
+        Ok((tx.clone(), self.handle_contract_call(tx)))
+    }
+
+    // what if we want to cancel the order before it hits the books tho...
+    // offer to buy
+    // should return the id of the order on the rubicon books
+    #[instrument(level = "debug", skip(self))]
+    fn offer(
         &self,
         pay_amt: U256,
         pay_gem: Address,
         buy_amt: U256,
         buy_gem: Address,
         pos: Option<U256>,
-    ) -> Result<(ContractCall<M,U256>, impl Future<Output=TxResult> + '_)> {
+    ) -> Result<(ContractCall<M, U256>, impl Future<Output = TxResult> + '_)> {
         let internal_position = pos.unwrap_or(U256::zero());
 
         let tx = if self.is_legacy() {
@@ -328,9 +236,12 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
-    /// eventually this should terminate in a bool...
+    /// Cancels an order that's already on the Rubicon book
     #[instrument(level = "debug", skip(self))]
-    async fn cancel(&self, order_id: U256) -> TxResult {
+    fn cancel(
+        &self,
+        order_id: U256,
+    ) -> Result<(ContractCall<M, U256>, impl Future<Output = TxResult> + '_)> {
         let tx = if self.is_legacy() {
             self.market()
                 .method::<_, U256>("cancel", (order_id,))?
@@ -338,31 +249,11 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         } else {
             self.market().method::<_, U256>("cancel", (order_id,))?
         };
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(Level::WARN, "[cancel]: failed to send tx with error: {}", e);
-                return Err(e.into());
-            }
-        };
-
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[cancel]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-
-        Ok(receipt)
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // second, we have wrapper functions around the raw functions, for the users to interact with
-
+    /*
     /// executes a limit order using the constraints set out in the `AssetSwap` type
     #[instrument(level = "info", skip(self))]
     pub async fn limit_order_as(&self, swap: &AssetSwap) -> Result<U256> {
@@ -376,16 +267,15 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         source: &ChainNativeAsset,
         target: &ChainNativeAsset,
     ) -> Result<U256> {
-        let rst_opt_receipt = self
+        let (_, rst_opt_receipt) = self
             .offer(
                 source.size().to_owned(),
                 source.address().unwrap(),
                 target.size().to_owned(),
                 target.address().unwrap(),
                 None,
-            )
-            .await;
-        match rst_opt_receipt {
+            )?;
+        match rst_opt_receipt.await {
             Ok(Some(receipt)) => Ok(deserialize_offer_receipt(&receipt)),
             Ok(None) => {
                 event!(
@@ -487,7 +377,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
             Ok(None) => Err(anyhow!("transaction receipt was an Ok(None) type!")),
             Err(e) => Err(e),
         }
-    }
+    }*/
 
     // RUBICON BATH HOUSE FUNCTIONS
     pub async fn self_is_approved_strategist(&self) -> Result<bool> {
@@ -509,7 +399,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // RUBICON BATH PAIR FUNCTIONS
 
-    /**
+    /*
      * what functions do we need?
      * - tail off (DONE)
      * - tail off multi (DONE)
@@ -530,14 +420,14 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // returns a trade ID (U256)
     /// this emits a LogStrategistTrade event
     #[instrument(level = "debug", skip(self))]
-    async fn place_market_making_trades(
+    fn place_market_making_trades(
         &self,
         token_pair: [Address; 2],
         ask_num: U256,
         ask_dem: U256,
         bid_num: U256,
         bid_dem: U256,
-    ) -> TxResult {
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -551,46 +441,20 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 (token_pair, ask_num, ask_dem, bid_num, bid_dem),
             )?,
         };
-
-        println!("\ntx: {:?}\n", &tx);
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[place_market_making_trades]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\npending: {:?}\n", &pending);
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[place_market_making_trades]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\nreceipt: {:?}\n", &receipt);
-        Ok(receipt)
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // INCOMPLETE: shouldn't this return a vector of Order IDs?
     /// this emits a LogBatchMarketMakingTrades event
     #[instrument(level = "debug", skip(self))]
-    async fn batch_place_market_making_trades(
+    fn batch_place_market_making_trades(
         &self,
         token_pair: [Address; 2],
         ask_nums: Vec<U256>,
         ask_dems: Vec<U256>,
         bid_nums: Vec<U256>,
         bid_dems: Vec<U256>,
-    ) -> TxResult {
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         if !(ask_nums.len() == ask_dems.len() && bid_nums.len() == bid_dems.len()) {
             // there's some mismatch in the input values...
             // we should return an error and log it
@@ -615,32 +479,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                     (token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
                 )?,
             };
-            println!("\ntx: {:?}\n", &tx);
-            let pending = match tx.send().await {
-                Ok(x) => x,
-                Err(e) => {
-                    event!(
-                        Level::WARN,
-                        "[batch_place_market_making_trades]: failed to send tx with error: {}",
-                        e
-                    );
-                    return Err(e.into());
-                }
-            };
-            println!("\npending: {:?}\n", &pending);
-            let receipt = match pending.await {
-                Ok(x) => x,
-                Err(e) => {
-                    event!(
-                        Level::WARN,
-                        "[batch_place_market_making_trades]: failed to get receipt with error: {}",
-                        e
-                    );
-                    return Err(e.into());
-                }
-            };
-            println!("\nreceipt: {:?}\n", &receipt);
-            Ok(receipt)
+            Ok((tx.clone(), self.handle_contract_call(tx)))
         }
     }
 
@@ -648,7 +487,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // token_pair is of the form [base, quote]
     // this has no output
     #[instrument(level = "debug", skip(self))]
-    async fn requote_offers(
+    fn requote_offers(
         &self,
         order_id: U256,
         token_pair: [Address; 2],
@@ -656,7 +495,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dem: U256,
         bid_num: U256,
         bid_dem: U256,
-    ) -> TxResult {
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -670,32 +509,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 (order_id, token_pair, ask_num, ask_dem, bid_num, bid_dem),
             )?,
         };
-        println!("\ntx: {:?}\n", &tx);
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[requote_offers]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\npending: {:?}\n", &pending);
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[requote_offers]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\nreceipt: {:?}\n", &receipt);
-        Ok(receipt)
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // requotes a series of paired bids and asks
@@ -703,7 +517,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // token_pair is of the form [base, quote]
     // this has no output
     #[instrument(level = "debug", skip(self))]
-    async fn batch_requote_offers(
+    fn batch_requote_offers(
         &self,
         ids: Vec<U256>,
         token_pair: [Address; 2],
@@ -711,69 +525,32 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dems: Vec<U256>,
         bid_nums: Vec<U256>,
         bid_dems: Vec<U256>,
-    ) -> TxResult {
-        if !(ask_nums.len() == ask_dems.len()
-            && bid_nums.len() == bid_dems.len()
-            && ask_nums.len() == ids.len())
-        {
-            // there's some mismatch in the input values...
-            // we should return an error and log it
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
+        assert!(
+            !(ask_nums.len() == ask_dems.len()
+                && bid_nums.len() == bid_dems.len()
+                && ask_nums.len() == ids.len())
+        );
 
-            event!(
-                Level::WARN,
-                "[batch_requote_offers]: mismatch in input vectors!"
-            );
-            Err(anyhow!(
-                "[batch_requote_offers]: mismatch in input vectors!"
-            ))
-        } else {
-            // we're good to go
-
-            let tx = match self.is_legacy() {
-                true => self
-                    .pair()
-                    .method::<_, ()>(
-                        "batchRequoteOffers",
-                        (ids, token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
-                    )?
-                    .legacy(),
-                false => self.pair().method::<_, ()>(
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>(
                     "batchRequoteOffers",
                     (ids, token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
-                )?,
-            };
-            println!("\ntx: {:?}\n", &tx);
-            let pending = match tx.send().await {
-                Ok(x) => x,
-                Err(e) => {
-                    event!(
-                        Level::WARN,
-                        "[batch_requote_offers]: failed to send tx with error: {}",
-                        e
-                    );
-                    return Err(e.into());
-                }
-            };
-            println!("\npending: {:?}\n", &pending);
-            let receipt = match pending.await {
-                Ok(x) => x,
-                Err(e) => {
-                    event!(
-                        Level::WARN,
-                        "[batch_requote_offers]: failed to get receipt with error: {}",
-                        e
-                    );
-                    return Err(e.into());
-                }
-            };
-            println!("\nreceipt: {:?}\n", &receipt);
-            Ok(receipt)
-        }
+                )?
+                .legacy(),
+            false => self.pair().method::<_, ()>(
+                "batchRequoteOffers",
+                (ids, token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
+            )?,
+        };
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    async fn scrub_strategist_trade(&self, trade_id: U256) -> TxResult {
+    fn scrub_strategist_trade(&self, trade_id: U256) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -783,40 +560,12 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 .pair()
                 .method::<_, ()>("scrubStrategistTrade", trade_id)?,
         };
-        println!("\ntx: {:?}\n", &tx);
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[scrub_strategist_trade]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\npending: {:?}\n", &pending);
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[scrub_strategist_trade]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\nreceipt: {:?}\n", &receipt);
-        Ok(receipt)
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    async fn scrub_strategist_trades(
-        &self,
-        trade_ids: Vec<U256>,
-    ) -> TxResult {
+    fn scrub_strategist_trades(&self, trade_ids: Vec<U256>) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -826,38 +575,13 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 .pair()
                 .method::<_, ()>("scrubStrategistTrades", trade_ids)?,
         };
-        println!("\ntx: {:?}\n", &tx);
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[scrub_strategist_trades]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\npending: {:?}\n", &pending);
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[scrub_strategist_trades]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\nreceipt: {:?}\n", &receipt);
-        Ok(receipt)
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // in an old ethers rust UV3 project, I used a u32 for the fee type......
     // let's fucking hope this works
     #[instrument(level = "debug", skip(self))]
-    async fn tailoff(
+    fn tailoff(
         &self,
         target_pool: Address,
         token_to_handle: Address,
@@ -866,7 +590,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         amount: U256,
         hurdle: U256,
         pool_fee: u32,
-    ) -> TxResult {
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -896,37 +620,12 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 ),
             )?,
         };
-        println!("\ntx: {:?}\n", &tx);
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[tailoff]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\npending: {:?}\n", &pending);
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[tailoff]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\nreceipt: {:?}\n", &receipt);
-        Ok(receipt)
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    async fn tailoff_multi(
+    fn tailoff_multi(
         &self,
         target_pool: Address,
         amount: U256,
@@ -934,7 +633,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         fees: Vec<u32>,
         hurdle: U256,
         strat_util: Address,
-    ) -> TxResult {
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -948,43 +647,18 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 (target_pool, amount, assets, fees, hurdle, strat_util),
             )?,
         };
-        println!("\ntx: {:?}\n", &tx);
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[tailoff_multi]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\npending: {:?}\n", &pending);
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[tailoff_multi]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\nreceipt: {:?}\n", &receipt);
-        Ok(receipt)
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // this has no output
     #[instrument(level = "debug", skip(self))]
-    async fn rebalance_pair(
+    fn rebalance_pair(
         &self,
         asset_rebal_amt: U256,
         quote_rebal_amt: U256,
         underlying_asset: Address,
         underlying_quote: Address,
-    ) -> TxResult {
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -1008,37 +682,13 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 ),
             )?,
         };
-        println!("\ntx: {:?}\n", &tx);
-        let pending = match tx.send().await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[rebalance_pair]: failed to send tx with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\npending: {:?}\n", &pending);
-        let receipt = match pending.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[rebalance_pair]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-        println!("\nreceipt: {:?}\n", &receipt);
-        Ok(receipt)
+        Ok((tx.clone(), self.handle_contract_call(tx)))
     }
 
     // now, we go and write some helper functions to make our lives easier
     // these are helper functions that take other helper types as arguments
     // they're public, not private, they're meant to be used by users
+    /*
     #[instrument(level = "info", skip(self))]
     pub async fn s_place_paired_trade(&self, bid: AssetSwap, ask: AssetSwap) -> Result<()> {
         // we've got to go check that the bid and ask are local and conjugate
@@ -1089,13 +739,13 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok(())
     }
 
-    #[instrument(level = "info", skip(self))]
+    // #[instrument(level = "info", skip(self))]
     pub async fn s_requote_paired_trade(
         &self,
         order_id: U256,
         bid: AssetSwap,
         ask: AssetSwap,
-    ) -> Result<TransactionReceipt> {
+    ) -> Result<(ContractCall<M, ()>, impl Future<Output = TxResult> + '_)> {
         // the bid is quote seeking base
         // the ask is base seeking quote
         // we have to assert that the bid chain is the same as the ask chain is the same as the Session chain
@@ -1142,13 +792,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
             bid.source().asset().to_address(chain)?,
         ]; // base, quote
 
-        let tx_receipt = self
-            .requote_offers(order_id, token_pair, bid_num, bid_den, ask_num, ask_den)
-            .await?;
-
-        tx_receipt.ok_or(anyhow!(
-            "[requote_paired_trade]: ERROR: tx_receipt is None!"
-        ))
+        self.requote_offers(order_id, token_pair, bid_num, bid_den, ask_num, ask_den)
     }
 
     #[instrument(level = "info", skip(self))]
@@ -1293,7 +937,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     pub async fn s_self_get_outstanding_strat_trades(&self, pair: Pair) -> Result<Vec<U256>> {
         let self_addr = self.get_address();
         self.s_get_outstanding_strat_trades(pair, self_addr.ok_or(anyhow!("[s_self_get_outstanding_strat_trades]: We don't have an address for this provider!"))?).await
-    }
+    }*/
 
     // UTILITY FUNCTIONS AND WHATNOT
     /// This checks that the bids and asks are:

@@ -1,11 +1,6 @@
 #![allow(dead_code)]
-use anyhow::{Result};
-use ethers::{
-    abi::Abi,
-    contract::Contract,
-    core::types::{Address},
-    providers::Middleware,
-};
+use anyhow::Result;
+use ethers::{abi::Abi, contract::Contract, core::types::Address, providers::Middleware};
 use std::sync::Arc;
 
 /// Builds the default BathHouse contract on OP Mainnet
