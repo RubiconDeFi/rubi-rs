@@ -9,7 +9,8 @@ Rubicon Rust SDK
 ### Beta
 
 -   [ ] Full Rubicon v1.3 support
-
+-   [ ] Rubicon v1.3 function wrappers
+-   [ ] Full event streaming/broadcasting support for Rubicon v1.3 events
 ## Roadmap
 
 -   [ ] ERC-20 support

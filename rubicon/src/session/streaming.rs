@@ -27,25 +27,25 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M>
 where
     <M as Middleware>::Provider: PubsubClient,
 {
-    // should accept a Broadcast<LogBatchRequote> channel
-    pub async fn pair_broadcast_batch_requotes(
-        &self,
-        sink: broadcast::Sender<events::LogBatchRequoteOffers>,
-    ) {
-        broadcast_events_stream::<_, events::LogBatchRequoteOffers>(self.pair(), sink).await;
+    /*
+     * What events should I be listening to??? 
+     * Maybe we'll just let the users decide...
+     */
+
+    async fn broadcast_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(&self, tx: broadcast::Sender<E>) {
+        broadcast_events_stream(self.pair(), tx).await;
     }
 
-    // should accept a Broadcast<LogBatchRequote> channel
-    pub async fn market_aid_broadcast_batch_requotes(
-        &self,
-        sink: broadcast::Sender<events::LogBatchRequoteOffers>,
-    ) {
-        broadcast_events_stream::<_, events::LogBatchRequoteOffers>(
-            self.market_aid().unwrap(),
-            sink,
-        )
-        .await;
+    async fn broadcast_filter_transform_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static,
+    K: Clone + std::fmt::Debug,
+    F: Fn(E) -> Option<K>,>(&self, tx: broadcast::Sender<K>, f: F) {
+        broadcast_filter_transform_events_stream(self.pair(), tx, f).await;
     }
+
+    async fn flume_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(&self, tx: flume::Sender<E>,) {
+        flume_events_stream(self.pair(), tx).await;
+    }
+    
 }
 
 // might reduce overhead in the Tokio scheduler???
@@ -78,6 +78,7 @@ async fn broadcast_events_stream<
     }
 }
 
+#[inline]
 async fn broadcast_filter_transform_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,
@@ -110,6 +111,7 @@ async fn broadcast_filter_transform_events_stream<
     }
 }
 
+#[inline]
 async fn flume_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,
@@ -136,6 +138,7 @@ async fn flume_events_stream<
     }
 }
 
+#[inline]
 async fn flume_filter_transform_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,

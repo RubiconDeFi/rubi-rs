@@ -156,10 +156,35 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // first, we have the raw functions that interact with the contracts on chain
 
+    /**
+     * List of all Market functions:
+     * - bump
+     * - buy 
+     * - buyAllAmount // 
+     * - cancel // 
+     * - del_rank 
+     * - initialize 
+     * - kill 
+     * - make 
+     * - offer // 
+     * - offer // 
+     * - offer // 
+     * - sellAllAmount // 
+     * - setAqueductAddress
+     * - setAqueductDistributionLive
+     * - setBuyEnabled
+     * - setFeeBPS
+     * - setFeeTo
+     * - setMinSell
+     * - setOwner
+     * - stop
+     * - take
+     */
+
     /// This is a market buy, where we spend no more than max_fill_amount to buy buy_amt
     /// the returned value is the fill amount
     #[instrument(level = "debug", skip(self))]
-    fn buy_all_amount(
+    pub fn buy_all_amount(
         &self,
         buy_gem: Address,
         buy_amt: U256,
@@ -181,7 +206,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// a market sell, where we spend pay_amt to buy as much as possible of buy_gem (and we get *at least* min_fill_amount)
     /// the returned value is the filled amount
     #[instrument(level = "debug", skip(self))]
-    fn sell_all_amount(
+    pub fn sell_all_amount(
         &self,
         pay_gem: Address,
         pay_amt: U256,
@@ -208,7 +233,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // offer to buy
     // should return the id of the order on the rubicon books
     #[instrument(level = "debug", skip(self))]
-    fn offer(
+    pub fn offer(
         &self,
         pay_amt: U256,
         pay_gem: Address,
@@ -237,7 +262,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// Cancels an order that's already on the Rubicon book
     #[instrument(level = "debug", skip(self))]
-    fn cancel(
+    pub fn cancel(
         &self,
         order_id: U256,
     ) -> Result<(ContractCall<M, U256>, impl Future<Output = TxResult> + '_)> {
