@@ -1,0 +1,16 @@
+[package]
+name = "numeraire"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { workspace=true, features=["derive"] }
+derive-new = { workspace=true }
+anyhow = { workspace=true }
+rayon = { workspace=true }
+rust_decimal = { workspace=true }
+ethers = { workspace=true }
+base64 = { workspace=true }
+hex = { workspace=true }
