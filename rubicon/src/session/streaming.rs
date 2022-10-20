@@ -1,20 +1,12 @@
-use super::events;
+#![allow(dead_code)]
+
 use super::*;
-use anyhow::{anyhow, Result};
 
 use ethers::{
-    abi::Detokenize,
     contract::Contract,
-    core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
-    prelude::{builders::ContractCall, EthEvent, PubsubClient},
+    prelude::{EthEvent, PubsubClient},
     providers::{Middleware, StreamExt},
 };
-use futures::Future;
-use numeraire::prelude::*;
-
-use std::convert::Into;
-
-use std::sync::Arc;
 use tracing::{event, instrument, Level};
 
 use flume;
@@ -28,24 +20,85 @@ where
     <M as Middleware>::Provider: PubsubClient,
 {
     /*
-     * What events should I be listening to??? 
+     * What events should I be listening to???
      * Maybe we'll just let the users decide...
      */
 
-    async fn broadcast_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(&self, tx: broadcast::Sender<E>) {
+    async fn broadcast_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+        &self,
+        tx: broadcast::Sender<E>,
+    ) {
         broadcast_events_stream(self.pair(), tx).await;
     }
 
-    async fn broadcast_filter_transform_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static,
-    K: Clone + std::fmt::Debug,
-    F: Fn(E) -> Option<K>,>(&self, tx: broadcast::Sender<K>, f: F) {
+    async fn broadcast_filter_transform_pair_events<
+        E: EthEvent + Clone + std::fmt::Debug + 'static,
+        K: Clone + std::fmt::Debug,
+        F: Fn(E) -> Option<K>,
+    >(
+        &self,
+        tx: broadcast::Sender<K>,
+        f: F,
+    ) {
         broadcast_filter_transform_events_stream(self.pair(), tx, f).await;
     }
 
-    async fn flume_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(&self, tx: flume::Sender<E>,) {
+    async fn flume_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+        &self,
+        tx: flume::Sender<E>,
+    ) {
         flume_events_stream(self.pair(), tx).await;
     }
-    
+
+    async fn flume_filter_transform_pair_events<
+        E: EthEvent + Clone + std::fmt::Debug + 'static,
+        K: Clone + std::fmt::Debug,
+        F: Fn(E) -> Option<K>,
+    >(
+        &self,
+        tx: flume::Sender<K>,
+        filter: F,
+    ) {
+        flume_filter_transform_events_stream(self.pair(), tx, filter).await;
+    }
+
+    async fn broadcast_market_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+        &self,
+        tx: broadcast::Sender<E>,
+    ) {
+        broadcast_events_stream(self.market(), tx).await;
+    }
+
+    async fn broadcast_filter_transform_market_events<
+        E: EthEvent + Clone + std::fmt::Debug + 'static,
+        K: Clone + std::fmt::Debug,
+        F: Fn(E) -> Option<K>,
+    >(
+        &self,
+        tx: broadcast::Sender<K>,
+        f: F,
+    ) {
+        broadcast_filter_transform_events_stream(self.market(), tx, f).await;
+    }
+
+    async fn flume_market_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+        &self,
+        tx: flume::Sender<E>,
+    ) {
+        flume_events_stream(self.market(), tx).await;
+    }
+
+    async fn flume_filter_transform_market_events<
+        E: EthEvent + Clone + std::fmt::Debug + 'static,
+        K: Clone + std::fmt::Debug,
+        F: Fn(E) -> Option<K>,
+    >(
+        &self,
+        tx: flume::Sender<K>,
+        filter: F,
+    ) {
+        flume_filter_transform_events_stream(self.market(), tx, filter).await;
+    }
 }
 
 // might reduce overhead in the Tokio scheduler???
@@ -117,7 +170,7 @@ async fn flume_events_stream<
     E: EthEvent + Clone + std::fmt::Debug + 'static,
 >(
     contract: &Contract<M>,
-    mut tx: flume::Sender<E>,
+    tx: flume::Sender<E>,
 ) where
     <M as Middleware>::Provider: PubsubClient,
 {
@@ -146,7 +199,7 @@ async fn flume_filter_transform_events_stream<
     F: Fn(E) -> Option<K>,
 >(
     contract: &Contract<M>,
-    mut tx: flume::Sender<K>,
+    tx: flume::Sender<K>,
     filter: F,
 ) where
     <M as Middleware>::Provider: PubsubClient,

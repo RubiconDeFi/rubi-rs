@@ -6,7 +6,7 @@ use ethers::{
     abi::Detokenize,
     contract::Contract,
     core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
-    prelude::{builders::ContractCall, EthEvent, PubsubClient},
+    prelude::{builders::ContractCall, EthEvent},
     providers::{Middleware, StreamExt},
 };
 use futures::Future;
@@ -41,7 +41,9 @@ pub struct RubiconSession<M: Middleware + Clone + 'static> {
     _internal_middleware: Arc<M>, // we just keep this around to clone if we build new contracts
 }
 
+#[allow(dead_code)]
 impl<M: Middleware + Clone + 'static> RubiconSession<M> {
+    
     pub fn new_mainnet(client: M) -> Self {
         let arc_client = Arc::new(client);
         Self {
@@ -159,17 +161,17 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /**
      * List of all Market functions:
      * - bump
-     * - buy 
-     * - buyAllAmount // 
-     * - cancel // 
-     * - del_rank 
-     * - initialize 
-     * - kill 
-     * - make 
-     * - offer // 
-     * - offer // 
-     * - offer // 
-     * - sellAllAmount // 
+     * - buy
+     * - buyAllAmount //
+     * - cancel //
+     * - del_rank
+     * - initialize
+     * - kill
+     * - make
+     * - offer //
+     * - offer //
+     * - offer //
+     * - sellAllAmount //
      * - setAqueductAddress
      * - setAqueductDistributionLive
      * - setBuyEnabled
