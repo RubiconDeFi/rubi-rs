@@ -3,10 +3,11 @@
 members = [
     "rubicon",
     "numeraire",
+    "testing",
 ]
 
 [workspace.dependencies]
-ethers = { version="0.17.0", features=["abigen"] }
+ethers = { version="0.15.0", features=["abigen", "ws", "rustls"] }
 tracing = "0.1.37"
 serde_json = "1.0.86"
 anyhow = "1.0.65"
