@@ -44,14 +44,14 @@ async fn main() {
     // let (_call, fut) = conn.buy_all_amount(dai_addr, dai_size, usdc_addr, max_u256).unwrap();
     // let receipt = fut.await;
 
-    let call = conn.buy_all_amount_v2(dai_addr, dai_size, usdc_addr, max_u256).unwrap();
-    let fut = conn.handle_contract_call_v2(call);
-    //tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    //let cancel = conn.handle_contract_call_v2(call.clone());
-    let receipt = fut.await;
+    // let fut = conn.handle_contract_call_v2(call);
+    // let call = conn.buy_all_amount_v2(dai_addr, dai_size, usdc_addr, max_u256).unwrap();
+    // //tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    // //let cancel = conn.handle_contract_call_v2(call.clone());
+    // let receipt = fut.await;
     //let cancel = cancel.await;
 
-    println!("{:?}", &receipt);
+    // println!("{:?}", &receipt);
 
 
 

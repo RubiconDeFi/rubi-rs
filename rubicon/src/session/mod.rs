@@ -222,29 +222,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         buy_amt: U256,
         pay_gem: Address,
         max_fill_amount: U256,
-    ) -> ContractCall<M, U256>  {
-        
-        let tx = match self.is_legacy() {
-            true => self
-                .market()
-                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?
-                .legacy(),
-            false => self
-                .market()
-                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?,
-        };
-        tx
-    }
-
-    /// This is a market buy, where we spend no more than max_fill_amount to buy buy_amt
-    /// the returned value is the fill amount
-    #[instrument(level = "debug", skip(self))]
-    pub fn buy_all_amount_v2(
-        &self,
-        buy_gem: Address,
-        buy_amt: U256,
-        pay_gem: Address,
-        max_fill_amount: U256,
     ) -> Result<ContractCall<M, U256>> {
         println!("entering buy_all_amount_v2");
         let tx = match self.is_legacy() {
@@ -268,7 +245,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         pay_amt: U256,
         buy_gem: Address,
         min_fill_amount: U256,
-    ) -> ContractCall<M, U256>  {
+    ) -> Result<ContractCall<M, U256>> {
         let tx = match self.is_legacy() {
             true => self
                 .market()
@@ -282,7 +259,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 (pay_gem, pay_amt, buy_gem, min_fill_amount),
             )?,
         };
-        tx
+        Ok(tx)
     }
 
     // what if we want to cancel the order before it hits the books tho...
@@ -296,7 +273,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         buy_amt: U256,
         buy_gem: Address,
         pos: Option<U256>,
-    ) -> ContractCall<M, U256>  {
+    ) -> Result<ContractCall<M, U256>>  {
         let internal_position = pos.unwrap_or(U256::zero());
 
         let tx = if self.is_legacy() {
@@ -313,7 +290,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
             )?
         };
 
-        tx
+        Ok(tx)
     }
 
     /// Cancels an order that's already on the Rubicon book
@@ -321,7 +298,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     pub fn cancel(
         &self,
         order_id: U256,
-    ) -> ContractCall<M, U256>  {
+    ) -> Result<ContractCall<M, U256>> {
         let tx = if self.is_legacy() {
             self.market()
                 .method::<_, U256>("cancel", (order_id,))?
@@ -329,7 +306,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         } else {
             self.market().method::<_, U256>("cancel", (order_id,))?
         };
-        tx
+        Ok(tx)
     }
 
     // second, we have wrapper functions around the raw functions, for the users to interact with
@@ -507,7 +484,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dem: U256,
         bid_num: U256,
         bid_dem: U256,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -521,7 +498,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 (token_pair, ask_num, ask_dem, bid_num, bid_dem),
             )?,
         };
-        tx
+        Ok(tx)
     }
 
     // INCOMPLETE: shouldn't this return a vector of Order IDs?
@@ -534,7 +511,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dems: Vec<U256>,
         bid_nums: Vec<U256>,
         bid_dems: Vec<U256>,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         if !(ask_nums.len() == ask_dems.len() && bid_nums.len() == bid_dems.len()) {
             // there's some mismatch in the input values...
             // we should return an error and log it
@@ -559,7 +536,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                     (token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
                 )?,
             };
-            tx
+            Ok(tx)
         }
     }
 
@@ -575,7 +552,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dem: U256,
         bid_num: U256,
         bid_dem: U256,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -589,7 +566,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 (order_id, token_pair, ask_num, ask_dem, bid_num, bid_dem),
             )?,
         };
-        tx
+        Ok(tx)
     }
 
     // requotes a series of paired bids and asks
@@ -605,7 +582,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ask_dems: Vec<U256>,
         bid_nums: Vec<U256>,
         bid_dems: Vec<U256>,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         assert!(
             !(ask_nums.len() == ask_dems.len()
                 && bid_nums.len() == bid_dems.len()
@@ -625,7 +602,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 (ids, token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
             )?,
         };
-        tx
+        Ok(tx)
     }
 
     // doesn't have any output
@@ -633,7 +610,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     fn scrub_strategist_trade(
         &self,
         trade_id: U256,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -643,7 +620,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 .pair()
                 .method::<_, ()>("scrubStrategistTrade", trade_id)?,
         };
-        tx
+        Ok(tx)
     }
 
     // doesn't have any output
@@ -651,7 +628,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     fn scrub_strategist_trades(
         &self,
         trade_ids: Vec<U256>,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -661,7 +638,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 .pair()
                 .method::<_, ()>("scrubStrategistTrades", trade_ids)?,
         };
-        tx
+        Ok(tx)
     }
 
     // in an old ethers rust UV3 project, I used a u32 for the fee type......
@@ -676,7 +653,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         amount: U256,
         hurdle: U256,
         pool_fee: u32,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -706,7 +683,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 ),
             )?,
         };
-        tx
+        Ok(tx)
     }
 
     // doesn't have any output
@@ -719,7 +696,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         fees: Vec<u32>,
         hurdle: U256,
         strat_util: Address,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -733,7 +710,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 (target_pool, amount, assets, fees, hurdle, strat_util),
             )?,
         };
-        tx
+        Ok(tx)
     }
 
     // this has no output
@@ -744,7 +721,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         quote_rebal_amt: U256,
         underlying_asset: Address,
         underlying_quote: Address,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -768,7 +745,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
                 ),
             )?,
         };
-        tx
+        Ok(tx)
     }
 
     // now, we go and write some helper functions to make our lives easier
@@ -831,7 +808,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         order_id: U256,
         bid: AssetSwap,
         ask: AssetSwap,
-    ) -> ContractCall<M, ()> {
+    ) -> Result<ContractCall<M, ()>> {
         // the bid is quote seeking base
         // the ask is base seeking quote
         // we have to assert that the bid chain is the same as the ask chain is the same as the Session chain
