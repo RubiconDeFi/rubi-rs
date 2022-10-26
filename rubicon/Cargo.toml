@@ -1,6 +1,6 @@
 [package]
-name = "rubicon"
-version = "0.1.0"
+name = "rbcn-rs"
+version = "1.3.0-alpha"
 edition = "2021"
 license-file = "LICENSE.txt"
 description = "An SDK for rubicon.finance"
