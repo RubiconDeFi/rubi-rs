@@ -16,8 +16,6 @@ pub enum Asset {
     Weth,
     Wbtc,
     Eth,
-    Btc,
-    Usd,
     Dai,
     Snx,
     Op,
@@ -44,8 +42,6 @@ impl Asset {
             Asset::Weth => Some(18),
             Asset::Wbtc => Some(8),
             Asset::Eth => Some(18),
-            Asset::Btc => None, // this is probably wrong......
-            Asset::Usd => None,
             Asset::Dai => Some(18),
             Asset::Snx => Some(18),
             Asset::Op => Some(18),

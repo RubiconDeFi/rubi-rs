@@ -222,36 +222,6 @@ async fn flume_filter_transform_events_stream<
     }
 }
 
-// might reduce overhead in the Tokio scheduler???
-// since we wouldn't have an .await.await, merely an .await
-//#[inline]
-/*async fn forward_events_stream<
-    M: Middleware + 'static,
-    E: EthEvent + Clone + std::fmt::Debug + 'static,
->(
-    contract: &Contract<M>,
-    mut tx: flume::Sender<E>,
-) where
-    <M as Middleware>::Provider: PubsubClient,
-{
-    let event = contract.event::<E>();
-    let mut evt_stream = event.subscribe().await.unwrap();
-
-    while let Some(rst_event) = evt_stream.next().await {
-        match rst_event {
-            Ok(new_event) => {
-                if let Err(SendError(failed_event)) = tx.send(new_event.clone()).await {
-                    println!(
-                        "[forward_events_stream]: ERROR: failed to forward event {:?} to channel!",
-                        failed_event
-                    );
-                }
-            }
-            Err(e) => println!("[forward_events_stream]: new event generated error {e}"), // are these fatal???
-        }
-    }
-}*/
-
 async fn proc_forward_events_stream<
     M: Middleware + 'static,
     E: EthEvent + std::fmt::Debug + 'static,
