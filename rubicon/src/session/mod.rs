@@ -4,17 +4,16 @@ use anyhow::{anyhow, Result};
 
 use ethers::{
     contract::Contract,
-    core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
-    prelude::{builders::ContractCall, EthEvent},
-    providers::{Middleware},
+    core::types::{Address, BlockNumber, Chain, U256},
+    prelude::{EthEvent},
+    providers::Middleware,
 };
-use futures::Future;
+pub use ethers::prelude::builders::ContractCall;
 use numeraire::prelude::*;
 
 use std::convert::Into;
 
 use std::sync::Arc;
-use tracing::{event, instrument, Level};
 
 #[cfg(feature = "streaming")]
 mod streaming;
@@ -27,9 +26,12 @@ mod streaming;
  *      ERROR is used for errors that will likely result in the death of the program
  */
 
-pub type TxResult = Result<Option<TransactionReceipt>>;
-trait FutTxResult: Future<Output = TxResult> {}
-
+/**
+ * [`RubiconSession`] wraps up all of the basic contracts that the protocol uses into one convenient struct.
+ * It provides all of the basic functions you would need to tracsact with the protocol. All of the view/pure functions are async,
+ * and will return the expected value. All of the mutating functions are sync, and will return a ContractCall<M>.
+ * You can then take that ContractCall and manipulate it as you want before sending it to the blockchain with the `.send()` method.
+ */
 pub struct RubiconSession<M: Middleware + Clone + 'static> {
     chain: Chain,
     rbcn_market: Contract<M>,
@@ -42,7 +44,7 @@ pub struct RubiconSession<M: Middleware + Clone + 'static> {
 
 #[allow(dead_code)]
 impl<M: Middleware + Clone + 'static> RubiconSession<M> {
-    
+    /// Creates a new [`RubiconSession`] configured to Optimism Mainnet.
     pub fn new_mainnet(client: M) -> Self {
         let arc_client = Arc::new(client);
         Self {
@@ -58,6 +60,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         }
     }
 
+    /// Creates a new [`RubiconSession`] configured to Optimism Kovan. OP Kovan is now considered obsolete.
     pub fn new_kovan(client: M) -> Self {
         let arc_client = Arc::new(client);
         Self {
@@ -71,6 +74,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         }
     }
 
+    /// Creates a new [`RubiconSession`] configured to Optimism Goerli.
     pub fn new_goerli(client: M) -> Self {
         let arc_client = Arc::new(client);
         Self {
@@ -84,7 +88,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         }
     }
 
-    #[instrument(level = "debug", skip_all)]
+    /// Changes the provider of the [`RubiconSession`].
+    /// This may be useful to you if your provider endpoint goes down, and you want to switch to a backup on the fly.
     fn change_provider(&mut self, provider: M) {
         let a = Arc::new(provider);
 
@@ -96,27 +101,33 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     // Getter functions, and some small helper functions
+    /// Returns a reference to the RubiconMarket contract.
     pub fn market(&self) -> &Contract<M> {
         &self.rbcn_market
     }
 
+    /// Returns a reference to the BathHouse contract.
     pub fn bath_house(&self) -> &Contract<M> {
         &self.bath_house
     }
 
+    /// Returns a reference to the BathPair contract.
     pub fn pair(&self) -> &Contract<M> {
         &self.bath_pair
     }
 
+    /// Returns a reference to the Router contract.
     pub fn router(&self) -> &Contract<M> {
         &self.router
     }
 
+    /// Returns a reference to the chain enum.
     pub fn chain(&self) -> &Chain {
         &self.chain
     }
 
-    /// Market Aid isn't deployed on Kovan and Goerli - we can't always depend on it being there
+    /// Returns an Option on a reference to the MarketAid contract.
+    /// Market Aid isn't deployed on Kovan and Goerli - we can't always depend on it being there.
     pub fn market_aid(&self) -> Option<&Contract<M>> {
         self.market_aid.as_ref()
     }
@@ -162,7 +173,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// This is a market buy, where we spend no more than max_fill_amount to buy buy_amt
     /// the returned value is the fill amount
-    #[instrument(level = "debug", skip(self))]
     pub fn buy_all_amount(
         &self,
         buy_gem: Address,
@@ -183,9 +193,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok(tx)
     }
 
-    /// a market sell, where we spend pay_amt to buy as much as possible of buy_gem (and we get *at least* min_fill_amount)
+    /// This is a market sell, where we spend pay_amt to buy as much as possible of buy_gem (and we get *at least* min_fill_amount)
     /// the returned value is the filled amount
-    #[instrument(level = "debug", skip(self))]
     pub fn sell_all_amount(
         &self,
         pay_gem: Address,
@@ -209,10 +218,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok(tx)
     }
 
-    // what if we want to cancel the order before it hits the books tho...
-    // offer to buy
-    // should return the id of the order on the rubicon books
-    #[instrument(level = "debug", skip(self))]
+    /// This is used to construct a limit order, where we want to sell `pay_amt` of `pay_gem` for at least `buy_amt` of `buy_gem`.
+    /// The `pos` parameter should be `None` unless you know the new position of the order in the sorted orderbook.
     pub fn offer(
         &self,
         pay_amt: U256,
@@ -220,7 +227,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         buy_amt: U256,
         buy_gem: Address,
         pos: Option<U256>,
-    ) -> Result<ContractCall<M, U256>>  {
+    ) -> Result<ContractCall<M, U256>> {
         let internal_position = pos.unwrap_or(U256::zero());
 
         let tx = if self.is_legacy() {
@@ -241,11 +248,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     /// Cancels an order that's already on the Rubicon book
-    #[instrument(level = "debug", skip(self))]
-    pub fn cancel(
-        &self,
-        order_id: U256,
-    ) -> Result<ContractCall<M, U256>> {
+    pub fn cancel(&self, order_id: U256) -> Result<ContractCall<M, U256>> {
         let tx = if self.is_legacy() {
             self.market()
                 .method::<_, U256>("cancel", (order_id,))?
@@ -257,6 +260,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     // RUBICON BATH HOUSE FUNCTIONS
+    /// Strategists have to be approved by the Rubicon protocol before they can place market making trades with pooled funds.
+    /// This function returns true if the current middleware is an approved strategist. 
     pub async fn self_is_approved_strategist(&self) -> Result<bool> {
         self.is_approved_strategist(
             self.get_address()
@@ -265,6 +270,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         .await
     }
 
+    /// Strategists have to be approved by the Rubicon protocol before they can place market making trades with pooled funds.
+    /// This function returns true if the supplied address is an approved strategist.
     pub async fn is_approved_strategist(&self, addr: Address) -> Result<bool> {
         let receipt = self
             .bath_house()
@@ -286,7 +293,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
      * - batch market making trades (DONE except for deser of return...)
      * - rebalance pair (DONE)
      * - scrub strategist trade  (DONE)
-     * - scrub strategist trades (DONE)
+     * - scrub strategist orders (DONE)
      */
 
     // these are the raw functions for interacting with the chain
@@ -295,36 +302,37 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // ask_num is ask_numerator, ask_dem -> ask_denominator
     // token_pair is of the form [base, quote]
     // returns a trade ID (U256)
-    /// this emits a LogStrategistTrade event
-    #[instrument(level = "debug", skip(self))]
-    fn place_market_making_trades(
+    /// This is used to place a strategist trade on the market.
+    /// Trades are placed in pairs - a bid and an ask.
+    /// `ask_num` and `ask_den` are the numerator and denominator of the ask price, respectively. The same is true of the bid.
+    /// `token_pair` is of the form [base, quote], where `base != quote`.
+    pub fn place_market_making_trades(
         &self,
         token_pair: [Address; 2],
         ask_num: U256,
-        ask_dem: U256,
+        ask_den: U256,
         bid_num: U256,
-        bid_dem: U256,
+        bid_den: U256,
     ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
                 .method::<_, ()>(
                     "placeMarketMakingTrades",
-                    (token_pair, ask_num, ask_dem, bid_num, bid_dem),
+                    (token_pair, ask_num, ask_den, bid_num, bid_den),
                 )?
                 .legacy(),
             false => self.pair().method::<_, ()>(
                 "placeMarketMakingTrades",
-                (token_pair, ask_num, ask_dem, bid_num, bid_dem),
+                (token_pair, ask_num, ask_den, bid_num, bid_den),
             )?,
         };
         Ok(tx)
     }
 
     // INCOMPLETE: shouldn't this return a vector of Order IDs?
-    /// this emits a LogBatchMarketMakingTrades event
-    #[instrument(level = "debug", skip(self))]
-    fn batch_place_market_making_trades(
+    /// This returns a [`ContractCall`] that will place a series of paired market making trades.
+    pub fn batch_place_market_making_trades(
         &self,
         token_pair: [Address; 2],
         ask_nums: Vec<U256>,
@@ -335,10 +343,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         if !(ask_nums.len() == ask_dems.len() && bid_nums.len() == bid_dems.len()) {
             // there's some mismatch in the input values...
             // we should return an error and log it
-            event!(
-                Level::WARN,
-                "[batch_place_market_making_trades]: mismatch in input vectors!"
-            );
             Err(anyhow!(
                 "[batch_place_market_making_trades]: mismatch in input vectors!"
             ))
@@ -363,8 +367,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // requotes a single pair of bid and ask
     // token_pair is of the form [base, quote]
     // this has no output
-    #[instrument(level = "debug", skip(self))]
-    fn requote_offers(
+    /// This returns a [`ContractCall`] that requotes the given pair of orders.
+    pub fn requote_offers(
         &self,
         order_id: U256,
         token_pair: [Address; 2],
@@ -393,8 +397,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // this system operates in pairs - so that the first ask and the first bid share the same id, i think
     // token_pair is of the form [base, quote]
     // this has no output
-    #[instrument(level = "debug", skip(self))]
-    fn batch_requote_offers(
+    /** This returns a [`ContractCall`] that requotes a series of paired strategist orders. */
+    pub fn batch_requote_offers(
         &self,
         ids: Vec<U256>,
         token_pair: [Address; 2],
@@ -426,11 +430,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     // doesn't have any output
-    #[instrument(level = "debug", skip(self))]
-    fn scrub_strategist_trade(
-        &self,
-        trade_id: U256,
-    ) -> Result<ContractCall<M, ()>> {
+    /** This returns a [`ContractCall`] that cancels an outstanding strategist orders. */
+    pub fn scrub_strategist_trade(&self, trade_id: U256) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -444,11 +445,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     // doesn't have any output
-    #[instrument(level = "debug", skip(self))]
-    fn scrub_strategist_trades(
-        &self,
-        trade_ids: Vec<U256>,
-    ) -> Result<ContractCall<M, ()>> {
+    /** This returns a [`ContractCall`] that cancels a list of outstanding strategist orders.  */
+    pub fn scrub_strategist_trades(&self, trade_ids: Vec<U256>) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -463,8 +461,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // in an old ethers rust UV3 project, I used a u32 for the fee type......
     // let's fucking hope this works
-    #[instrument(level = "debug", skip(self))]
-    fn tailoff(
+    pub fn tailoff(
         &self,
         target_pool: Address,
         token_to_handle: Address,
@@ -507,8 +504,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     // doesn't have any output
-    #[instrument(level = "debug", skip(self))]
-    fn tailoff_multi(
+    pub fn tailoff_multi(
         &self,
         target_pool: Address,
         amount: U256,
@@ -534,8 +530,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     // this has no output
-    #[instrument(level = "debug", skip(self))]
-    fn rebalance_pair(
+    pub fn rebalance_pair(
         &self,
         asset_rebal_amt: U256,
         quote_rebal_amt: U256,
@@ -570,8 +565,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // MarketAid functions
     // first, the raw functions, later, the helper functions
-    /// Returns a Result on a Vector of trade ID's
-    async fn get_outstanding_strategist_trades(
+    /// Returns a Result on a Vector of trade IDs.
+    pub async fn get_outstanding_strategist_trades(
         &self,
         asset: Address,
         quote: Address,

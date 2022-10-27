@@ -1,12 +1,12 @@
 #![allow(dead_code)]
 
-use anyhow::{Result};
+use anyhow::Result;
 
 use ethers::{
     contract::Contract,
     core::types::{Address, Chain, U256},
-    prelude::{builders::ContractCall},
-    providers::{Middleware},
+    prelude::builders::ContractCall,
+    providers::Middleware,
 };
 use std::sync::Arc;
 
@@ -57,17 +57,27 @@ impl<M: Middleware + 'static> Token<M> {
 
     /// Returns the amount of tokens in existence. This function is a View function.
     pub async fn total_supply(&self) -> Result<U256> {
-        Ok(self.contract().method::<_, U256>("totalSupply", ())?.call().await?)
+        Ok(self
+            .contract()
+            .method::<_, U256>("totalSupply", ())?
+            .call()
+            .await?)
     }
 
     /// Returns the amount of tokens owned by `account`. This function is a View function.
     pub async fn balance_of(&self, account: Address) -> Result<U256> {
-        Ok(self.contract().method::<_, U256>("balanceOf", (account,))?.call().await?)
+        Ok(self
+            .contract()
+            .method::<_, U256>("balanceOf", (account,))?
+            .call()
+            .await?)
     }
 
-    /// Returns a contract call that transfers `amount` of tokens from the caller's account to the `receiver`'s account. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs or with the methods provided in `call`.
+    /// Returns a contract call that transfers `amount` of tokens from the caller's account to the `receiver`'s account. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs.
     pub fn transfer(&self, receiver: Address, amount: U256) -> Result<ContractCall<M, bool>> {
-        let mut tx = self.contract().method::<_, bool>("transfer", (receiver, amount))?;
+        let mut tx = self
+            .contract()
+            .method::<_, bool>("transfer", (receiver, amount))?;
         if self.is_legacy() {
             tx = tx.legacy();
         }
@@ -76,23 +86,30 @@ impl<M: Middleware + 'static> Token<M> {
 
     /// Returns the amount of `owner`'s tokens that `spender` is allowed to spend. This function is a View function.
     pub async fn allowance(&self, owner: Address, spender: Address) -> Result<U256> {
-        Ok(self.contract().method::<_, U256>("allowance", (owner,spender))?.call().await?)
+        Ok(self
+            .contract()
+            .method::<_, U256>("allowance", (owner, spender))?
+            .call()
+            .await?)
     }
 
-    /// Returns a contract call that sets `amount` as the allowance of `spender` of the caller's tokens. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs or with the methods provided in `call`.
+    /// Returns a contract call that sets `amount` as the allowance of `spender` of the caller's tokens. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs.
     pub fn approve(&self, spender: Address, amount: U256) -> Result<ContractCall<M, bool>> {
-        let mut tx = self.coin
-            .method("approve", (spender, amount))?;
+        let mut tx = self.coin.method("approve", (spender, amount))?;
         if self.is_legacy() {
             tx = tx.legacy();
         }
         Ok(tx)
     }
 
-    /// Returns a contract call that transfers `amount` of tokens from `sender` to `receiver` using the allowance mechanism. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs or with the methods provided in `call`.
-    pub fn transfer_from(&self, from: Address, to: Address, amount: U256) -> Result<ContractCall<M, bool>> {
-        let mut tx = self.coin
-            .method("transferFrom", (from, to, amount))?;
+    /// Returns a contract call that transfers `amount` of tokens from `sender` to `receiver` using the allowance mechanism. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs.
+    pub fn transfer_from(
+        &self,
+        from: Address,
+        to: Address,
+        amount: U256,
+    ) -> Result<ContractCall<M, bool>> {
+        let mut tx = self.coin.method("transferFrom", (from, to, amount))?;
         if self.is_legacy() {
             tx = tx.legacy();
         }
