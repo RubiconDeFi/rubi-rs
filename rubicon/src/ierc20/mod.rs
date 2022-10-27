@@ -1,21 +1,14 @@
-use super::events;
+#![allow(dead_code)]
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 
 use ethers::{
-    abi::Detokenize,
     contract::Contract,
-    core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
-    prelude::{builders::ContractCall, EthEvent},
+    core::types::{Address, Chain, U256},
+    prelude::{builders::ContractCall},
     providers::{Middleware},
 };
-use futures::Future;
-use numeraire::prelude::*;
-
-use std::convert::Into;
-
 use std::sync::Arc;
-use tracing::{event, instrument, Level};
 
 pub struct Token<M: Middleware + 'static> {
     chain: Chain,
