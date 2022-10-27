@@ -3,11 +3,10 @@ use super::events;
 use anyhow::{anyhow, Result};
 
 use ethers::{
-    abi::Detokenize,
     contract::Contract,
     core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
     prelude::{builders::ContractCall, EthEvent},
-    providers::Middleware,
+    providers::{Middleware},
 };
 use futures::Future;
 use numeraire::prelude::*;
@@ -43,6 +42,7 @@ pub struct RubiconSession<M: Middleware + Clone + 'static> {
 
 #[allow(dead_code)]
 impl<M: Middleware + Clone + 'static> RubiconSession<M> {
+    
     pub fn new_mainnet(client: M) -> Self {
         let arc_client = Arc::new(client);
         Self {
@@ -129,39 +129,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// Are we on a legacy chain (pre EIP-1559)? If so, we have to use legacy TX calls...
     pub fn is_legacy(&self) -> bool {
         self.chain().is_legacy()
-    }
-
-    /**
-     * This is a helper function that executes a transaction, and waits for a receipt.
-     * By using the (ContractCall<M,D>, Future<...>) model for all of our transactions, we should retain the ability to
-     * cancel stuff in flight, by calling the ContractCall part of the returned tuple again.
-     */
-    pub async fn handle_contract_call_v2<T: Detokenize>(
-        &self,
-        mut call: ContractCall<M, T>,
-    ) -> TxResult {
-        println!("entering handle_contract_call_v2");
-        let gas_limit = Some(call.estimate_gas().await.unwrap());
-        println!("gas_estimate: {}", gas_limit.as_ref().unwrap().to_string());
-        call = if let Some(gl) = gas_limit {
-            call.gas(gl)
-        } else {
-            call
-        };
-
-        let receipt = match call.send().await?.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[handle_contract_call]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-
-        Ok(receipt)
     }
 
     // RUBICON MARKET FUNCTIONS
@@ -253,7 +220,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         buy_amt: U256,
         buy_gem: Address,
         pos: Option<U256>,
-    ) -> Result<ContractCall<M, U256>> {
+    ) -> Result<ContractCall<M, U256>>  {
         let internal_position = pos.unwrap_or(U256::zero());
 
         let tx = if self.is_legacy() {
@@ -275,7 +242,10 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// Cancels an order that's already on the Rubicon book
     #[instrument(level = "debug", skip(self))]
-    pub fn cancel(&self, order_id: U256) -> Result<ContractCall<M, U256>> {
+    pub fn cancel(
+        &self,
+        order_id: U256,
+    ) -> Result<ContractCall<M, U256>> {
         let tx = if self.is_legacy() {
             self.market()
                 .method::<_, U256>("cancel", (order_id,))?
@@ -584,7 +554,10 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    fn scrub_strategist_trade(&self, trade_id: U256) -> Result<ContractCall<M, ()>> {
+    fn scrub_strategist_trade(
+        &self,
+        trade_id: U256,
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -599,7 +572,10 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    fn scrub_strategist_trades(&self, trade_ids: Vec<U256>) -> Result<ContractCall<M, ()>> {
+    fn scrub_strategist_trades(
+        &self,
+        trade_ids: Vec<U256>,
+    ) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -719,217 +695,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok(tx)
     }
 
-    // now, we go and write some helper functions to make our lives easier
-    // these are helper functions that take other helper types as arguments
-    // they're public, not private, they're meant to be used by users
-    /*
-    #[instrument(level = "info", skip(self))]
-    pub async fn s_place_paired_trade(&self, bid: AssetSwap, ask: AssetSwap) -> Result<()> {
-        // we've got to go check that the bid and ask are local and conjugate
-        self.local_and_conjugate_rst(vec![bid.clone()].as_slice(), vec![ask.clone()].as_slice())?;
-
-        // now we can go and place the trade
-        let token_pair = [bid.target().address()?, bid.source().address()?]; // [base, quote]
-                                                                             // numerator is quote, denominator is base
-        let _receipt = self
-            .place_market_making_trades(
-                token_pair,
-                *ask.target().size(),
-                *ask.source().size(),
-                *bid.source().size(),
-                *bid.target().size(),
-            )
-            .await;
-
-        Ok(())
-    }
-
-    #[instrument(level = "info", skip(self))]
-    pub async fn s_place_paired_trades(
-        &self,
-        bids: Vec<AssetSwap>,
-        asks: Vec<AssetSwap>,
-    ) -> Result<()> {
-        // we've got to go check that the bid and ask are local and conjugate
-        self.local_and_conjugate_rst(&bids, &asks)?;
-
-        // now, we can go turn this into several vectors of bullshit
-        // numerators are quote, denominators are base
-        let ask_nums: Vec<U256> = asks.iter().map(|ask| *ask.target().size()).collect();
-        let ask_dens: Vec<U256> = asks.iter().map(|ask| *ask.source().size()).collect();
-        let bid_nums: Vec<U256> = bids.iter().map(|bid| *bid.source().size()).collect();
-        let bid_dens: Vec<U256> = bids.iter().map(|bid| *bid.target().size()).collect();
-
-        // token_pair is of the form [base, quote]
-        let token_pair = [
-            bids[0].target().asset().to_address(self.chain())?,
-            bids[0].source().asset().to_address(self.chain())?,
-        ];
-
-        let _receipt = self
-            .batch_place_market_making_trades(token_pair, ask_nums, ask_dens, bid_nums, bid_dens)
-            .await;
-
-        Ok(())
-    }
-
-    // #[instrument(level = "info", skip(self))]
-    pub async fn s_requote_paired_trade(
-        &self,
-        order_id: U256,
-        bid: AssetSwap,
-        ask: AssetSwap,
-    ) -> Result<ContractCall<M, ()>> {
-        // the bid is quote seeking base
-        // the ask is base seeking quote
-        // we have to assert that the bid chain is the same as the ask chain is the same as the Session chain
-        // we also have to assert that both the bid and the ask are local to a single chain
-
-        if !bid.is_local_to_chain() {
-            return Err(anyhow!(
-                "[requote_paired_trade]: ERROR: bid is not local to a single chain!"
-            ));
-        }
-
-        if !ask.is_local_to_chain() {
-            return Err(anyhow!(
-                "[requote_paired_trade]: ERROR: ask is not local to a single chain!"
-            ));
-        }
-
-        if bid.source().chain() != ask.source().chain() {
-            return Err(anyhow!(
-                "[requote_paired_trade]: ERROR: bid and ask are not local to the same chain!"
-            ));
-        }
-
-        // now, we need to assert that the bid is basically the inverse of the ask in terms of assets
-        if bid.source().asset() != ask.target().asset() {
-            return Err(anyhow!("[requote_paired_trade]: ERROR: bid source asset and ask target asset are not the same!"));
-        }
-
-        if bid.target().asset() != ask.source().asset() {
-            return Err(anyhow!("[requote_paired_trade]: ERROR: bid target asset and ask source asset are not the same!"));
-        }
-
-        // this is all we will check - everything else (like, is ask.price > bid.price) needs to be up to the user to not fuck up
-        // numerator is quote
-        // denominator is base
-        let bid_num = *bid.source().size();
-        let bid_den = *bid.target().size();
-        let ask_num = *ask.target().size();
-        let ask_den = *ask.source().size();
-
-        let chain = self.chain();
-        let token_pair = [
-            bid.target().asset().to_address(chain)?,
-            bid.source().asset().to_address(chain)?,
-        ]; // base, quote
-
-        self.requote_offers(order_id, token_pair, bid_num, bid_den, ask_num, ask_den)
-    }
-
-    #[instrument(level = "info", skip(self))]
-    pub async fn s_batch_requote_paired_trades(
-        &self,
-        order_ids: Vec<U256>,
-        bids: Vec<AssetSwap>,
-        asks: Vec<AssetSwap>,
-    ) -> Result<TransactionReceipt> {
-        // first we assert that the lengths of the vectors are all the same
-        if !(order_ids.len() == bids.len() && bids.len() == asks.len()) {
-            return Err(anyhow!("[batch_requote_paired_trades]: ERROR: order_ids, bids, and asks vectors are not all the same length!"));
-        }
-
-        // second, we assert that they're all greater than zero in length
-        if !order_ids.len() > 0 {
-            return Err(anyhow!("[batch_requote_paired_trades]: ERROR: order_ids, bids, and asks vectors are all zero length!"));
-        }
-
-        // the rest is checked by local and conjugate
-        self.local_and_conjugate_rst(&bids, &asks)?;
-
-        // now, we can go turn this into several vectors of bullshit
-        // numerators are quote, denominators are base
-        let ask_nums: Vec<U256> = asks.iter().map(|ask| *ask.target().size()).collect();
-        let ask_dens: Vec<U256> = asks.iter().map(|ask| *ask.source().size()).collect();
-        let bid_nums: Vec<U256> = bids.iter().map(|bid| *bid.source().size()).collect();
-        let bid_dens: Vec<U256> = bids.iter().map(|bid| *bid.target().size()).collect();
-
-        // token_pair is of the form [base, quote]
-        let token_pair = [
-            bids[0].target().asset().to_address(self.chain())?,
-            bids[0].source().asset().to_address(self.chain())?,
-        ];
-
-        // now, we've got all we need to call the elementary function
-        let rst_opt_tx = self
-            .batch_requote_offers(
-                order_ids, token_pair, ask_nums, ask_dens, bid_nums, bid_dens,
-            )
-            .await;
-
-        match rst_opt_tx {
-            Ok(Some(tx)) => Ok(tx),
-            Ok(None) => Err(anyhow!(
-                "[batch_requote_paired_trades]: ERROR: tx_receipt is None!"
-            )),
-            Err(e) => Err(e),
-        }
-    }
-
-    #[instrument(level = "info", skip(self))]
-    pub async fn s_clear_trade(&self, order_id: U256) -> Result<TransactionReceipt> {
-        let tx_receipt = self.scrub_strategist_trade(order_id).await?;
-        match tx_receipt {
-            Some(tx) => Ok(tx),
-            None => Err(anyhow!("[clear_strat_trade]: ERROR: tx_receipt is None!")),
-        }
-    }
-
-    #[instrument(level = "info", skip(self))]
-    pub async fn s_clear_trades(&self, order_ids: Vec<U256>) -> Result<TransactionReceipt> {
-        if order_ids.is_empty() {
-            return Err(anyhow!(
-                "[clear_strat_trades]: ERROR: order_ids vector is zero length!"
-            ));
-        }
-        let tx_receipt = self.scrub_strategist_trades(order_ids).await?;
-        match tx_receipt {
-            Some(tx) => Ok(tx),
-            None => Err(anyhow!("[clear_strat_trades]: ERROR: tx_receipt is None!")),
-        }
-    }
-
-    // this has no output
-    #[instrument(level = "info", skip(self))]
-    pub async fn s_rebalance_swap(&self, swap: AssetSwap) -> TxResult {
-        // first, we've gotta check that the chain is the same for both assets
-        if swap.source().chain() != swap.target().chain() {
-            event!(
-                Level::WARN,
-                "[rebalance_swap]: WARNING: source and target chains are not the same!"
-            );
-            return Err(anyhow!(
-                "[rebalance_swap]: WARNING: source and target chains are not the same!"
-            ));
-        }
-
-        // now, we need to check that the chain is the same as the strategist's chain
-        if swap.source().chain() != self.chain() {
-            event!(Level::WARN, "[rebalance_swap]: WARNING: source/target chain and strategist chain are not the same!");
-            return Err(anyhow!("[rebalance_swap]: WARNING: source and target chains are not the same as the session chain!"));
-        }
-
-        self.rebalance_pair(
-            *swap.source().size(),
-            *swap.target().size(),
-            swap.source().address()?,
-            swap.target().address()?,
-        )
-        .await
-    }
-
     // MarketAid functions
     // first, the raw functions, later, the helper functions
     /// Returns a Result on a Vector of trade ID's
@@ -953,25 +718,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
             )),
         }
     }
-
-    pub async fn s_get_outstanding_strat_trades(
-        &self,
-        pair: Pair,
-        strategist: Address,
-    ) -> Result<Vec<U256>> {
-        let chain = self.chain();
-        self.get_outstanding_strategist_trades(
-            pair.base().to_address(chain)?,
-            pair.quote().to_address(chain)?,
-            strategist,
-        )
-        .await
-    }
-
-    pub async fn s_self_get_outstanding_strat_trades(&self, pair: Pair) -> Result<Vec<U256>> {
-        let self_addr = self.get_address();
-        self.s_get_outstanding_strat_trades(pair, self_addr.ok_or(anyhow!("[s_self_get_outstanding_strat_trades]: We don't have an address for this provider!"))?).await
-    }*/
 
     // UTILITY FUNCTIONS AND WHATNOT
     /// This checks that the bids and asks are:
@@ -1091,36 +837,3 @@ async fn get_historical_events<M: Middleware + 'static, E: EthEvent>(
     };
     Ok(query.query().await?)
 }
-
-/// we return the amount of `buy_gem` we gained, and the amount of `pay_gem` we spent, in that order
-fn deserialize_market_order_receipt(receipt: &TransactionReceipt) -> (U256, U256) {
-    // we should do some type checking to make sure this shit doesn't die on us
-    // we should guarantee that the logs have non-zero length
-    // and that the last log has length equal to 256*2 bits = 64 bytes
-    assert!(!receipt.logs.is_empty());
-    let last_log_data: &[u8] = receipt.logs[receipt.logs.len() - 1].data.as_ref(); // the bytes of the last log
-
-    assert!(last_log_data.len() == 64);
-    // the first U256 is the amount of stuff we purchased
-    // the second is the amount of stuff we lost
-    let gained = U256::from_little_endian(&last_log_data[0..32]);
-    let lost = U256::from_little_endian(&last_log_data[32..64]);
-    (gained, lost)
-}
-
-fn deserialize_offer_receipt(receipt: &TransactionReceipt) -> U256 {
-    // we should do some type checking to make sure this shit doesn't die on us
-    // we should guarantee that the logs have non-zero length
-    // and that the last log has length equal to 256 bits = 32 bytes
-    assert!(!receipt.logs.is_empty());
-    let last_log_data: &[u8] = receipt.logs[receipt.logs.len() - 1].data.as_ref(); // the bytes of the last log
-    println!("last_log_data {:?}", hex::encode(last_log_data));
-
-    assert!(last_log_data.len() == 32);
-    // the last log is the order id
-    U256::from_big_endian(&last_log_data[0..32])
-}
-
-// pmmt => placeMarketMakingTrades
-// should return a Result of a U256 which is the order ID
-fn deserialize_pmmt_receipt() {}

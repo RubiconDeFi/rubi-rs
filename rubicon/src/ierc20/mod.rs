@@ -10,6 +10,9 @@ use ethers::{
 };
 use std::sync::Arc;
 
+/**
+ * This represents an ERC-20 token living on chain. It implements the IERC-20 specification from [OpenZeppelin](https://docs.openzeppelin.com/contracts/2.x/api/token/erc20#IERC20)
+ */
 pub struct Token<M: Middleware + 'static> {
     chain: Chain,
     coin: Contract<M>,

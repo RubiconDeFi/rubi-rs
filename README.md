@@ -20,6 +20,7 @@ Please refer to [this](https://docs.rubicon.finance/rubicon-docs/protocol/rubico
 
 ### Feature Flags
 
+- `full`: Enables all of the following features.
 - `streaming`: Enables event streaming via flume. Requires a websocket endpoint
 - `ierc20`: Enables ERC-20 support.
 

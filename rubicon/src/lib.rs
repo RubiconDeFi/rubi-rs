@@ -1,4 +1,3 @@
-mod call;
 mod contracts;
 mod events;
 mod session;
@@ -8,4 +7,6 @@ mod ierc20;
 pub mod prelude {
     pub use super::events::*;
     pub use super::session::*;
+    #[cfg(feature = "ierc20")]
+    pub use super::ierc20::*;
 }

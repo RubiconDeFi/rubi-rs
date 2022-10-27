@@ -7,7 +7,6 @@ use ethers::{
     prelude::{EthEvent, PubsubClient},
     providers::{Middleware, StreamExt},
 };
-use tracing::{event, instrument, Level};
 
 use flume;
 use postage::{
