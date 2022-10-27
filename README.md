@@ -1,10 +1,8 @@
 # rbcn-rs
 
-Rubicon Rust SDK
-
 ## Description
 
-`rbcn-rs` is an SDK which allows users to transact on the Rubicon protocol, a limit order book market on Optimism. 
+`rbcn-rs` is an SDK which allows users to transact on the Rubicon protocol, a limit order book market on [Optimism](https://www.optimism.io/). 
 
 ## Risk Disclaimers
 
@@ -16,6 +14,10 @@ This codebase is in Alpha and could contain bugs or change significantly between
 
 Please refer to [this](https://docs.rubicon.finance/rubicon-docs/protocol/rubicon-pools/risks) for information on the risks associated to the Rubicon Protocol.
 
+## Documentation
+
+Documentation for `rbcn-rs` can be found on Crates.io. Documentation for the Rubicon protocol can be found [here](https://docs.rubicon.finance)
+
 ## Features
 
 ### Feature Flags
@@ -26,14 +28,24 @@ Please refer to [this](https://docs.rubicon.finance/rubicon-docs/protocol/rubico
 
 ### Beta
 
--   [x] Basic Rubicon v1.3 Market support
--   [x] Basic Rubicon v1.3 Pair support
--   [x] Basic Rubicon v1.3 BathHouse support
--   [ ] API-Wrapped Rubicon v1.3 Market support
--   [ ] API-Wrapped Rubicon v1.3 Pair support
--   [x] API-Wrapped Rubicon v1.3 BathHouse support
--   [x] Full event streaming/broadcasting support for Rubicon v1.3 events
+- [x] Basic Rubicon v1.3 Market support
+- [x] Basic Rubicon v1.3 Pair support
+- [x] Basic Rubicon v1.3 BathHouse support
+- [ ] API-Wrapped Rubicon v1.3 Market support
+- [ ] API-Wrapped Rubicon v1.3 Pair support
+- [x] API-Wrapped Rubicon v1.3 BathHouse support
+- [x] Full event streaming/broadcasting support for Rubicon v1.3 events
+
 ### Future
 
--   [x] ERC-20 support
--   [ ] Uniswap V3 support
+- [x] ERC-20 support
+- [ ] Full [tracing](https://github.com/tokio-rs/tracing) support
+- [ ] Uniswap V3 support
+
+
+## Versioning
+
+This SDK is still in alpha. However, in order to maintain consistency with the Rubicon protocol, we follow the convention that the major and minor version numbers match the major and minor version numbers of the protocol, while the patch version number denotes same-version patches and upgrades to the SDK.
+## License 
+
+`rbcn-rs` is licensed under the Apache License (Version 2.0). See [LICENSE.txt](https://github.com/RubiconDeFi/rbcn-rs/blob/master/LICENSE.txt) for details. 

@@ -135,7 +135,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // first, we have the raw functions that interact with the contracts on chain
 
-    /**
+    /*
      * List of all Market functions:
      * - bump
      * - buy
@@ -255,133 +255,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         };
         Ok(tx)
     }
-
-    // second, we have wrapper functions around the raw functions, for the users to interact with
-    /*
-    /// executes a limit order using the constraints set out in the `AssetSwap` type
-    #[instrument(level = "info", skip(self))]
-    pub async fn limit_order_as(&self, swap: &AssetSwap) -> Result<U256> {
-        self.limit_order_native(swap.source(), swap.target()).await
-    }
-
-    /// executes a a limit order
-    #[instrument(level = "info", skip(self))]
-    pub async fn limit_order_native(
-        &self,
-        source: &ChainNativeAsset,
-        target: &ChainNativeAsset,
-    ) -> Result<U256> {
-        let (_, rst_opt_receipt) = self
-            .offer(
-                source.size().to_owned(),
-                source.address().unwrap(),
-                target.size().to_owned(),
-                target.address().unwrap(),
-                None,
-            )?;
-        match rst_opt_receipt.await {
-            Ok(Some(receipt)) => Ok(deserialize_offer_receipt(&receipt)),
-            Ok(None) => {
-                event!(
-                    Level::WARN,
-                    "[limit_order_native]: receipt was an Ok(None) type"
-                );
-                Err(anyhow!(
-                    "[limit_order_native]: receipt was an Ok(None) type"
-                ))
-            }
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[limit_order_native]: failed to get receipt with error: {}",
-                    e
-                );
-                Err(e)
-            }
-        }
-    }
-
-    /// wrapper around `market_order`, but using the `AssetSwap` struct
-    /// because of fees, this shouldn't return the identical asset swap that we put in
-    /// but it should be close
-    #[instrument(level = "info", skip(self))]
-    pub async fn market_order_as(&self, swap: &AssetSwap, is_bounded: bool) -> Result<AssetSwap> {
-        self.market_order_native(swap.source(), swap.target(), is_bounded, true)
-            .await
-    }
-
-    // should return the amount that was filled, if successful
-    #[instrument(level = "info", skip(self))]
-    pub async fn market_order_native(
-        &self,
-        source: &ChainNativeAsset,
-        target: &ChainNativeAsset,
-        is_bounded: bool,
-        is_buy: bool,
-    ) -> Result<AssetSwap> {
-        let opt_receipt = match (is_bounded, is_buy) {
-            // `target` represents what and how much we want to buy, `source` represents what and the maximum amount we want to sell
-            (true, true) => {
-                self.buy_all_amount(
-                    target.address()?,
-                    *target.size(),
-                    source.address()?,
-                    *source.size(),
-                )
-                .await
-            }
-            (true, false) => {
-                self.sell_all_amount(
-                    source.address()?,
-                    *source.size(),
-                    target.address()?,
-                    *target.size(),
-                )
-                .await
-            }
-            (false, true) => {
-                self.buy_all_amount(
-                    target.address()?,
-                    *target.size(),
-                    source.address()?,
-                    U256::MAX,
-                )
-                .await
-            }
-            (false, false) => {
-                self.sell_all_amount(
-                    source.address()?,
-                    *source.size(),
-                    target.address()?,
-                    U256::zero(),
-                )
-                .await
-            }
-        }?;
-
-        if let Some(receipt) = opt_receipt {
-            let (gained, lost) = deserialize_market_order_receipt(&receipt);
-            let asset_swap = AssetSwap::new_from_primitive(
-                *self.chain(),
-                *source.asset(),
-                *target.asset(),
-                lost,
-                gained,
-            );
-            asset_swap
-        } else {
-            Err(anyhow!("transaction receipt was an Ok(None) type!!!"))
-        }
-    }
-
-    #[instrument(level = "info", skip(self))]
-    pub async fn cancel_order(&self, order_id: U256) -> Result<TransactionReceipt> {
-        match self.cancel(order_id).await {
-            Ok(Some(receipt)) => Ok(receipt),
-            Ok(None) => Err(anyhow!("transaction receipt was an Ok(None) type!")),
-            Err(e) => Err(e),
-        }
-    }*/
 
     // RUBICON BATH HOUSE FUNCTIONS
     pub async fn self_is_approved_strategist(&self) -> Result<bool> {
