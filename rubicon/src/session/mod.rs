@@ -7,7 +7,7 @@ use ethers::{
     contract::Contract,
     core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
     prelude::{builders::ContractCall, EthEvent},
-    providers::{Middleware, StreamExt},
+    providers::Middleware,
 };
 use futures::Future;
 use numeraire::prelude::*;
@@ -43,7 +43,6 @@ pub struct RubiconSession<M: Middleware + Clone + 'static> {
 
 #[allow(dead_code)]
 impl<M: Middleware + Clone + 'static> RubiconSession<M> {
-    
     pub fn new_mainnet(client: M) -> Self {
         let arc_client = Arc::new(client);
         Self {
@@ -132,34 +131,15 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         self.chain().is_legacy()
     }
 
-    // TX HANDLING...
     /**
      * This is a helper function that executes a transaction, and waits for a receipt.
      * By using the (ContractCall<M,D>, Future<...>) model for all of our transactions, we should retain the ability to
      * cancel stuff in flight, by calling the ContractCall part of the returned tuple again.
      */
-    async fn handle_contract_call<T: Detokenize>(&self, call: ContractCall<M, T>) -> TxResult {
-        let receipt = match call.send().await?.await {
-            Ok(x) => x,
-            Err(e) => {
-                event!(
-                    Level::WARN,
-                    "[handle_contract_call]: failed to get receipt with error: {}",
-                    e
-                );
-                return Err(e.into());
-            }
-        };
-
-        Ok(receipt)
-    }
-
-    /**
-     * This is a helper function that executes a transaction, and waits for a receipt.
-     * By using the (ContractCall<M,D>, Future<...>) model for all of our transactions, we should retain the ability to
-     * cancel stuff in flight, by calling the ContractCall part of the returned tuple again.
-     */
-    pub async fn handle_contract_call_v2<T: Detokenize>(&self, mut call: ContractCall<M, T>) -> TxResult {
+    pub async fn handle_contract_call_v2<T: Detokenize>(
+        &self,
+        mut call: ContractCall<M, T>,
+    ) -> TxResult {
         println!("entering handle_contract_call_v2");
         let gas_limit = Some(call.estimate_gas().await.unwrap());
         println!("gas_estimate: {}", gas_limit.as_ref().unwrap().to_string());
@@ -168,7 +148,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         } else {
             call
         };
-        
+
         let receipt = match call.send().await?.await {
             Ok(x) => x,
             Err(e) => {
@@ -273,7 +253,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         buy_amt: U256,
         buy_gem: Address,
         pos: Option<U256>,
-    ) -> Result<ContractCall<M, U256>>  {
+    ) -> Result<ContractCall<M, U256>> {
         let internal_position = pos.unwrap_or(U256::zero());
 
         let tx = if self.is_legacy() {
@@ -295,10 +275,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// Cancels an order that's already on the Rubicon book
     #[instrument(level = "debug", skip(self))]
-    pub fn cancel(
-        &self,
-        order_id: U256,
-    ) -> Result<ContractCall<M, U256>> {
+    pub fn cancel(&self, order_id: U256) -> Result<ContractCall<M, U256>> {
         let tx = if self.is_legacy() {
             self.market()
                 .method::<_, U256>("cancel", (order_id,))?
@@ -607,10 +584,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    fn scrub_strategist_trade(
-        &self,
-        trade_id: U256,
-    ) -> Result<ContractCall<M, ()>> {
+    fn scrub_strategist_trade(&self, trade_id: U256) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()
@@ -625,10 +599,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     #[instrument(level = "debug", skip(self))]
-    fn scrub_strategist_trades(
-        &self,
-        trade_ids: Vec<U256>,
-    ) -> Result<ContractCall<M, ()>> {
+    fn scrub_strategist_trades(&self, trade_ids: Vec<U256>) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
                 .pair()

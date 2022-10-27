@@ -2,20 +2,36 @@
 
 Rubicon Rust SDK
 
-## Risk Disclaimer
+## Description
+
+`rbcn-rs` is an SDK which allows users to transact on the Rubicon protocol, a limit order book market on Optimism. 
+
+## Risk Disclaimers
+
+### SDK Disclaimer
+
+*risk disclaimer for this specific SDK*
+
+### Protocol Disclaimer
+
+Please refer to [this](https://docs.rubicon.finance/rubicon-docs/protocol/rubicon-pools/risks) for information on the risks associated to the Rubicon Protocol.
 
 ## Features
 
+### Feature Flags
+
+- `streaming`: enables event streaming via flume. Requires a websocket endpoint
+
 ### Beta
 
--   [x] Transaction level Rubicon v1.3 Market support
--   [ ] Transaction level Rubicon v1.3 Pair support
--   [ ] Full Rubicon v1.3 Market support
--   [ ] Full Rubicon v1.3 Pair support
--   [ ] Rubicon v1.3 market function wrappers
--   [ ] Rubicon v1.3 pair function wrappers
+-   [x] Basic Rubicon v1.3 Market support
+-   [x] Basic Rubicon v1.3 Pair support
+-   [x] Basic Rubicon v1.3 BathHouse support
+-   [ ] API-Wrapped Rubicon v1.3 Market support
+-   [ ] API-Wrapped Rubicon v1.3 Pair support
+-   [x] API-Wrapped Rubicon v1.3 BathHouse support
 -   [x] Full event streaming/broadcasting support for Rubicon v1.3 events
-## Roadmap
+### Future
 
 -   [ ] ERC-20 support
 -   [ ] Uniswap V3 support

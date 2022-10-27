@@ -3,7 +3,6 @@
 members = [
     "rubicon",
     "numeraire",
-    "testing",
 ]
 
 [workspace.dependencies]
