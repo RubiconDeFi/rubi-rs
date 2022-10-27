@@ -10,7 +10,7 @@ Rubicon Rust SDK
 
 ### SDK Disclaimer
 
-*risk disclaimer for this specific SDK*
+This codebase is in Alpha and could contain bugs or change significantly between versions. Contributing through Issues or Pull Requests is welcome!
 
 ### Protocol Disclaimer
 
@@ -20,7 +20,8 @@ Please refer to [this](https://docs.rubicon.finance/rubicon-docs/protocol/rubico
 
 ### Feature Flags
 
-- `streaming`: enables event streaming via flume. Requires a websocket endpoint
+- `streaming`: Enables event streaming via flume. Requires a websocket endpoint
+- `ierc20`: Enables ERC-20 support.
 
 ### Beta
 
