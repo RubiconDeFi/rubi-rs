@@ -24,4 +24,6 @@ flume = { workspace=true, optional=true }
 
 [features]
 default = []
+full = ["streaming", "ierc20"]
 streaming = ["postage", "flume"]
+ierc20 = []

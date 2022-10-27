@@ -34,5 +34,5 @@ Please refer to [this](https://docs.rubicon.finance/rubicon-docs/protocol/rubico
 -   [x] Full event streaming/broadcasting support for Rubicon v1.3 events
 ### Future
 
--   [ ] ERC-20 support
+-   [x] ERC-20 support
 -   [ ] Uniswap V3 support
