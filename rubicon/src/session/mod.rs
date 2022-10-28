@@ -1,5 +1,3 @@
-use super::events;
-
 use anyhow::{anyhow, Result};
 
 use ethers::{
@@ -30,7 +28,7 @@ mod streaming;
  * [`RubiconSession`] wraps up all of the basic contracts that the protocol uses into one convenient struct.
  * It provides all of the basic functions you would need to tracsact with the protocol. All of the view/pure functions are async,
  * and will return the expected value. All of the mutating functions are sync, and will return a ContractCall<M>.
- * You can then take that ContractCall and manipulate it as you want before sending it to the blockchain with the `.send()` method.
+ * You can then take that ContractCall and manipulate it as you want (e.g. setting gas limits) before sending it to your configured provider with the `.send()` method.
  */
 pub struct RubiconSession<M: Middleware + Clone + 'static> {
     chain: Chain,
@@ -121,15 +119,15 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         &self.router
     }
 
-    /// Returns a reference to the chain enum.
-    pub fn chain(&self) -> &Chain {
-        &self.chain
-    }
-
     /// Returns an Option on a reference to the MarketAid contract.
     /// Market Aid isn't deployed on Kovan and Goerli - we can't always depend on it being there.
     pub fn market_aid(&self) -> Option<&Contract<M>> {
         self.market_aid.as_ref()
+    }
+
+    /// Returns a reference to the ethers-rs chain enum.
+    pub fn chain(&self) -> &Chain {
+        &self.chain
     }
 
     /// Address associated with the current middleware, if it exists.
@@ -675,14 +673,80 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // let's handle LogBatchRequoteOffers first
     // to be perfectly frank, it's probably easier and faster to filter non-block number related stuff in memory after we receive a response
     // this might be wrong if we're dealing with huge numbers of events, where this might increase network load
-    /// This pulls historical event data from the chain
-    pub async fn pair_get_historical_batch_requotes(
+    /// This pulls historical event data from the BathPair contract.
+    /// # Example
+    /// ```
+    /// use rbcn::prelude::*;
+    /// let session: RubiconSession = ...;
+    /// if let Ok(data) = session.pair_get_historical_events::<LogBatchRequoteOffers>(Some(start_block), None).await {
+    ///     println!("Here are some historical requotes: {:?}", &data);
+    /// } else {
+    ///     println!("Something went wrong!");
+    /// }
+    /// ``` 
+    pub async fn pair_get_historical_events<E: EthEvent>(
         &self,
         oldest_block: Option<impl Into<BlockNumber>>,
         newest_block: Option<impl Into<BlockNumber>>,
-    ) -> Result<Vec<events::LogBatchRequoteOffers>> {
-        get_historical_events::<_, events::LogBatchRequoteOffers>(
+    ) -> Result<Vec<E>> {
+        get_historical_events::<_, E>(
             self.pair(),
+            oldest_block,
+            newest_block,
+        )
+        .await
+    }
+
+    /// This pulls historical event data from the RubiconMarket contract.
+    pub async fn market_get_historical_events<E: EthEvent>(
+        &self,
+        oldest_block: Option<impl Into<BlockNumber>>,
+        newest_block: Option<impl Into<BlockNumber>>,
+    ) -> Result<Vec<E>> {
+        get_historical_events::<_, E>(
+            self.market(),
+            oldest_block,
+            newest_block,
+        )
+        .await
+    }
+
+    /// This pulls historical event data from the BathHouse contract.
+    pub async fn bath_house_get_historical_events<E: EthEvent>(
+        &self,
+        oldest_block: Option<impl Into<BlockNumber>>,
+        newest_block: Option<impl Into<BlockNumber>>,
+    ) -> Result<Vec<E>> {
+        get_historical_events::<_, E>(
+            self.bath_house(),
+            oldest_block,
+            newest_block,
+        )
+        .await
+    }
+
+    /// This pulls historical event data from the Router contract.
+    pub async fn router_get_historical_events<E: EthEvent>(
+        &self,
+        oldest_block: Option<impl Into<BlockNumber>>,
+        newest_block: Option<impl Into<BlockNumber>>,
+    ) -> Result<Vec<E>> {
+        get_historical_events::<_, E>(
+            self.router(),
+            oldest_block,
+            newest_block,
+        )
+        .await
+    }
+
+    /// This pulls historical event data from the MarketAid contract.
+    pub async fn market_aid_get_historical_events<E: EthEvent>(
+        &self,
+        oldest_block: Option<impl Into<BlockNumber>>,
+        newest_block: Option<impl Into<BlockNumber>>,
+    ) -> Result<Vec<E>> {
+        get_historical_events::<_, E>(
+            self.market_aid().ok_or(anyhow!("[market_aid_get_historical_events]: no market aid contract exists!"))?,
             oldest_block,
             newest_block,
         )
