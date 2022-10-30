@@ -7,7 +7,7 @@ use ethers::{
     prelude::{EthEvent, PubsubClient},
     providers::{Middleware, StreamExt},
 };
-
+use tracing::{instrument, Level, event};
 use flume;
 use postage::{
     broadcast,
@@ -28,6 +28,7 @@ where
 
     /// This subscribes to an [`EthEvent`] `E` on the RubiconPair contract, and forwards the resulting events stream over a [`broadcast`] channel.
     /// [`broadcast`] channels send every event to every receiver.
+    #[instrument(level="debug", skip_all)]
     pub async fn broadcast_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
         &self,
         tx: broadcast::Sender<E>,
@@ -37,6 +38,7 @@ where
 
     /// This subscribes to an [`EthEvent`] `E` on the RubiconPair contract, filter maps the resulting event stream, and forwards the results over a [`broadcast`] channel.
     /// [`broadcast`] channels send every event to every receiver.
+    #[instrument(level="debug", skip_all)]
     pub async fn broadcast_filter_pair_events<
         E: EthEvent + Clone + std::fmt::Debug + 'static,
         K: Clone + std::fmt::Debug,
@@ -51,6 +53,7 @@ where
 
     /// This subscribes to an [`EthEvent`] `E` on the RubiconPair contract, and forwards the resulting events stream over a [`flume`] channel.
     /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    #[instrument(level="debug", skip_all)]
     pub async fn flume_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
         &self,
         tx: flume::Sender<E>,
@@ -60,6 +63,7 @@ where
 
     /// This subscribes to an [`EthEvent`] `E` on the RubiconPair contract, filter maps the resulting event stream, and forwards the results over a [`flume`] channel.
     /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    #[instrument(level="debug", skip_all)]
     pub async fn flume_filter_pair_events<
         E: EthEvent + Clone + std::fmt::Debug + 'static,
         K: Clone + std::fmt::Debug,
@@ -75,6 +79,7 @@ where
     // next, market events (both Broadcast and Flume)
     /// This subscribes to an [`EthEvent`] `E` on the RubiconMarket contract, and forwards the resulting events stream over a [`broadcast`] channel.
     /// [`broadcast`] channels send every event to every receiver.
+    #[instrument(level="debug", skip_all)]
     pub async fn broadcast_market_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
         &self,
         tx: broadcast::Sender<E>,
@@ -84,6 +89,7 @@ where
 
     /// This subscribes to an [`EthEvent`] `E` on the RubiconMarket contract, filter maps the resulting event stream, and forwards the results over a [`broadcast`] channel.
     /// [`broadcast`] channels send every event to every receiver.
+    #[instrument(level="debug", skip_all)]
     pub async fn broadcast_filter_market_events<
         E: EthEvent + Clone + std::fmt::Debug + 'static,
         K: Clone + std::fmt::Debug,
@@ -98,6 +104,7 @@ where
 
     /// This subscribes to an [`EthEvent`] `E` on the RubiconMarket contract, and forwards the resulting events stream over a [`flume`] channel.
     /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    #[instrument(level="debug", skip_all)]
     pub async fn flume_market_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
         &self,
         tx: flume::Sender<E>,
@@ -107,6 +114,7 @@ where
 
     /// This subscribes to an [`EthEvent`] `E` on the RubiconMarket contract, filter maps the resulting event stream, and forwards the results over a [`flume`] channel.
     /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    #[instrument(level="debug", skip_all)]
     pub async fn flume_filter_market_events<
         E: EthEvent + Clone + std::fmt::Debug + 'static,
         K: Clone + std::fmt::Debug,
@@ -123,6 +131,7 @@ where
 // might reduce overhead in the Tokio scheduler???
 // since we wouldn't have an .await.await, merely an .await
 #[inline]
+#[instrument(level="trace", skip_all)]
 async fn broadcast_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,
@@ -151,6 +160,7 @@ async fn broadcast_events_stream<
 }
 
 #[inline]
+#[instrument(level="trace", skip_all)]
 async fn broadcast_filter_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,
@@ -184,6 +194,7 @@ async fn broadcast_filter_events_stream<
 }
 
 #[inline]
+#[instrument(level="trace", skip_all)]
 async fn flume_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,
@@ -211,6 +222,7 @@ async fn flume_events_stream<
 }
 
 #[inline]
+#[instrument(level="trace", skip_all)]
 async fn flume_filter_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,
