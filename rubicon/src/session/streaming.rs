@@ -118,6 +118,55 @@ where
     ) {
         flume_filter_events_stream(self.market(), tx, filter).await;
     }
+
+    // next, market aid events (both Broadcast and Flume)
+    /// This subscribes to an [`EthEvent`] `E` on the Market Aid contract, and forwards the resulting events stream over a [`broadcast`] channel.
+    /// [`broadcast`] channels send every event to every receiver. Panics if the market aid contract is not set (will panic on OP Kovan and OP Goerli).
+    pub async fn broadcast_market_aid_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+        &self,
+        tx: broadcast::Sender<E>,
+    ) {
+        broadcast_events_stream(self.market_aid().unwrap(), tx).await;
+    }
+
+    /// This subscribes to an [`EthEvent`] `E` on the Market Aid contract, filter maps the resulting event stream, and forwards the results over a [`broadcast`] channel.
+    /// [`broadcast`] channels send every event to every receiver. Panics if the market aid contract is not set (will panic on OP Kovan and OP Goerli).
+    pub async fn broadcast_filter_market_aid_events<
+        E: EthEvent + Clone + std::fmt::Debug + 'static,
+        K: Clone + std::fmt::Debug,
+        F: Fn(E) -> Option<K>,
+    >(
+        &self,
+        tx: broadcast::Sender<K>,
+        f: F,
+    ) {
+        broadcast_filter_events_stream(self.market_aid(), tx, f).await;
+    }
+
+    /// This subscribes to an [`EthEvent`] `E` on the Market Aid contract, and forwards the resulting events stream over a [`flume`] channel.
+    /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    ///  Panics if the market aid contract is not set (will panic on OP Kovan and OP Goerli).
+    pub async fn flume_market_aid_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+        &self,
+        tx: flume::Sender<E>,
+    ) {
+        flume_events_stream(self.market_aid(), tx).await;
+    }
+
+    /// This subscribes to an [`EthEvent`] `E` on the Market Aid contract, filter maps the resulting event stream, and forwards the results over a [`flume`] channel.
+    /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    ///  Panics if the market aid contract is not set (will panic on OP Kovan and OP Goerli).
+    pub async fn flume_filter_market_aid_events<
+        E: EthEvent + Clone + std::fmt::Debug + 'static,
+        K: Clone + std::fmt::Debug,
+        F: Fn(E) -> Option<K>,
+    >(
+        &self,
+        tx: flume::Sender<K>,
+        filter: F,
+    ) {
+        flume_filter_events_stream(self.market_aid(), tx, filter).await;
+    }
 }
 
 // might reduce overhead in the Tokio scheduler???
