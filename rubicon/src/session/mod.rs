@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Result};
 
+pub use ethers::prelude::builders::ContractCall;
 use ethers::{
     contract::Contract,
     core::types::{Address, BlockNumber, Chain, U256},
-    prelude::{EthEvent},
+    prelude::EthEvent,
     providers::Middleware,
 };
-pub use ethers::prelude::builders::ContractCall;
 use numeraire::prelude::*;
 
 use std::convert::Into;
@@ -259,7 +259,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // RUBICON BATH HOUSE FUNCTIONS
     /// Strategists have to be approved by the Rubicon protocol before they can place market making trades with pooled funds.
-    /// This function returns true if the current middleware is an approved strategist. 
+    /// This function returns true if the current middleware is an approved strategist.
     pub async fn self_is_approved_strategist(&self) -> Result<bool> {
         self.is_approved_strategist(
             self.get_address()
@@ -683,18 +683,13 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// } else {
     ///     println!("Something went wrong!");
     /// }
-    /// ``` 
+    /// ```
     pub async fn pair_get_historical_events<E: EthEvent>(
         &self,
         oldest_block: Option<impl Into<BlockNumber>>,
         newest_block: Option<impl Into<BlockNumber>>,
     ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(
-            self.pair(),
-            oldest_block,
-            newest_block,
-        )
-        .await
+        get_historical_events::<_, E>(self.pair(), oldest_block, newest_block).await
     }
 
     /// This pulls historical event data from the RubiconMarket contract.
@@ -703,12 +698,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         oldest_block: Option<impl Into<BlockNumber>>,
         newest_block: Option<impl Into<BlockNumber>>,
     ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(
-            self.market(),
-            oldest_block,
-            newest_block,
-        )
-        .await
+        get_historical_events::<_, E>(self.market(), oldest_block, newest_block).await
     }
 
     /// This pulls historical event data from the BathHouse contract.
@@ -717,12 +707,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         oldest_block: Option<impl Into<BlockNumber>>,
         newest_block: Option<impl Into<BlockNumber>>,
     ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(
-            self.bath_house(),
-            oldest_block,
-            newest_block,
-        )
-        .await
+        get_historical_events::<_, E>(self.bath_house(), oldest_block, newest_block).await
     }
 
     /// This pulls historical event data from the Router contract.
@@ -731,12 +716,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         oldest_block: Option<impl Into<BlockNumber>>,
         newest_block: Option<impl Into<BlockNumber>>,
     ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(
-            self.router(),
-            oldest_block,
-            newest_block,
-        )
-        .await
+        get_historical_events::<_, E>(self.router(), oldest_block, newest_block).await
     }
 
     /// This pulls historical event data from the MarketAid contract.
@@ -746,7 +726,9 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         newest_block: Option<impl Into<BlockNumber>>,
     ) -> Result<Vec<E>> {
         get_historical_events::<_, E>(
-            self.market_aid().ok_or(anyhow!("[market_aid_get_historical_events]: no market aid contract exists!"))?,
+            self.market_aid().ok_or(anyhow!(
+                "[market_aid_get_historical_events]: no market aid contract exists!"
+            ))?,
             oldest_block,
             newest_block,
         )

@@ -23,14 +23,21 @@ where
      * Maybe we'll just let the users decide...
      */
 
-    async fn broadcast_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+    // first, we have Pair events
+    // both Broadcast and Flume
+
+    /// This subscribes to an [`EthEvent`] `E` on the RubiconPair contract, and forwards the resulting events stream over a [`broadcast`] channel.
+    /// [`broadcast`] channels send every event to every receiver.
+    pub async fn broadcast_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
         &self,
         tx: broadcast::Sender<E>,
     ) {
         broadcast_events_stream(self.pair(), tx).await;
     }
 
-    async fn broadcast_filter_transform_pair_events<
+    /// This subscribes to an [`EthEvent`] `E` on the RubiconPair contract, filter maps the resulting event stream, and forwards the results over a [`broadcast`] channel.
+    /// [`broadcast`] channels send every event to every receiver.
+    pub async fn broadcast_filter_pair_events<
         E: EthEvent + Clone + std::fmt::Debug + 'static,
         K: Clone + std::fmt::Debug,
         F: Fn(E) -> Option<K>,
@@ -39,17 +46,21 @@ where
         tx: broadcast::Sender<K>,
         f: F,
     ) {
-        broadcast_filter_transform_events_stream(self.pair(), tx, f).await;
+        broadcast_filter_events_stream(self.pair(), tx, f).await;
     }
 
-    async fn flume_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+    /// This subscribes to an [`EthEvent`] `E` on the RubiconPair contract, and forwards the resulting events stream over a [`flume`] channel.
+    /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    pub async fn flume_pair_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
         &self,
         tx: flume::Sender<E>,
     ) {
         flume_events_stream(self.pair(), tx).await;
     }
 
-    async fn flume_filter_transform_pair_events<
+    /// This subscribes to an [`EthEvent`] `E` on the RubiconPair contract, filter maps the resulting event stream, and forwards the results over a [`flume`] channel.
+    /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    pub async fn flume_filter_pair_events<
         E: EthEvent + Clone + std::fmt::Debug + 'static,
         K: Clone + std::fmt::Debug,
         F: Fn(E) -> Option<K>,
@@ -58,17 +69,22 @@ where
         tx: flume::Sender<K>,
         filter: F,
     ) {
-        flume_filter_transform_events_stream(self.pair(), tx, filter).await;
+        flume_filter_events_stream(self.pair(), tx, filter).await;
     }
 
-    async fn broadcast_market_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+    // next, market events (both Broadcast and Flume)
+    /// This subscribes to an [`EthEvent`] `E` on the RubiconMarket contract, and forwards the resulting events stream over a [`broadcast`] channel.
+    /// [`broadcast`] channels send every event to every receiver.
+    pub async fn broadcast_market_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
         &self,
         tx: broadcast::Sender<E>,
     ) {
         broadcast_events_stream(self.market(), tx).await;
     }
 
-    async fn broadcast_filter_transform_market_events<
+    /// This subscribes to an [`EthEvent`] `E` on the RubiconMarket contract, filter maps the resulting event stream, and forwards the results over a [`broadcast`] channel.
+    /// [`broadcast`] channels send every event to every receiver.
+    pub async fn broadcast_filter_market_events<
         E: EthEvent + Clone + std::fmt::Debug + 'static,
         K: Clone + std::fmt::Debug,
         F: Fn(E) -> Option<K>,
@@ -77,17 +93,21 @@ where
         tx: broadcast::Sender<K>,
         f: F,
     ) {
-        broadcast_filter_transform_events_stream(self.market(), tx, f).await;
+        broadcast_filter_events_stream(self.market(), tx, f).await;
     }
 
-    async fn flume_market_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
+    /// This subscribes to an [`EthEvent`] `E` on the RubiconMarket contract, and forwards the resulting events stream over a [`flume`] channel.
+    /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    pub async fn flume_market_events<E: EthEvent + Clone + std::fmt::Debug + 'static>(
         &self,
         tx: flume::Sender<E>,
     ) {
         flume_events_stream(self.market(), tx).await;
     }
 
-    async fn flume_filter_transform_market_events<
+    /// This subscribes to an [`EthEvent`] `E` on the RubiconMarket contract, filter maps the resulting event stream, and forwards the results over a [`flume`] channel.
+    /// [`flume`] channels are MPMC channels. Only one receiver receives a given event (the first one to call `recv`). Useful for work stealing.
+    pub async fn flume_filter_market_events<
         E: EthEvent + Clone + std::fmt::Debug + 'static,
         K: Clone + std::fmt::Debug,
         F: Fn(E) -> Option<K>,
@@ -96,7 +116,7 @@ where
         tx: flume::Sender<K>,
         filter: F,
     ) {
-        flume_filter_transform_events_stream(self.market(), tx, filter).await;
+        flume_filter_events_stream(self.market(), tx, filter).await;
     }
 }
 
@@ -131,7 +151,7 @@ async fn broadcast_events_stream<
 }
 
 #[inline]
-async fn broadcast_filter_transform_events_stream<
+async fn broadcast_filter_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,
     K: Clone + std::fmt::Debug,
@@ -191,7 +211,7 @@ async fn flume_events_stream<
 }
 
 #[inline]
-async fn flume_filter_transform_events_stream<
+async fn flume_filter_events_stream<
     M: Middleware + 'static,
     E: EthEvent + Clone + std::fmt::Debug + 'static,
     K: Clone + std::fmt::Debug,
