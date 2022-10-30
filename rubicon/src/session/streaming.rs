@@ -142,21 +142,31 @@ async fn broadcast_events_stream<
     <M as Middleware>::Provider: PubsubClient,
 {
     let event = contract.event::<E>();
-    let mut evt_stream = event.subscribe().await.unwrap();
+    let mut evt_stream = match event.subscribe().await {
+        Ok(evt_stream) => {
+            event!(Level::TRACE, "[broadcast_events_stream]: subscribed to event stream");
+            evt_stream
+        },
+        Err(e) => {
+            event!(Level::ERROR, "[broadcast_events_stream]: failed to subscribe to event stream with error {e}");
+            return;
+        }
+    };
 
     while let Some(rst_event) = evt_stream.next().await {
         match rst_event {
             Ok(new_event) => {
-                if let Err(SendError(failed_event)) = tx.send(new_event.clone()).await {
-                    println!(
-                        "[forward_events_stream]: ERROR: failed to forward event {:?} to channel!",
-                        failed_event
-                    );
+                if let Err(e) = tx.send(new_event).await {
+                    event!(Level::WARN, "[broadcast_events_stream]: ERROR: failed to forward event to channel with error {e}");
+                } else {
+                    // we successfully forwarded something over the channel
+                    event!(Level::TRACE, "[broadcast_events_stream]: successfully forwarded event to channel");
                 }
             }
-            Err(e) => println!("[forward_events_stream]: new event generated error {e}"), // are these fatal???
+            Err(e) => event!(Level::WARN, "[broadcast_events_stream]: new event generated error {e}"), // are these fatal???
         }
     }
+    event!(Level::WARN, "[broadcast_events_stream]: event stream ended");
 }
 
 #[inline]
@@ -174,23 +184,36 @@ async fn broadcast_filter_events_stream<
     <M as Middleware>::Provider: PubsubClient,
 {
     let event = contract.event::<E>();
-    let mut evt_stream = event.subscribe().await.unwrap();
+    let mut evt_stream = match event.subscribe().await {
+        Ok(evt_stream) => {
+            event!(Level::TRACE, "[broadcast_filter_events_stream]: subscribed to event stream");
+            evt_stream
+        },
+        Err(e) => {
+            event!(Level::ERROR, "[broadcast_filter_events_stream]: failed to subscribe to event stream with error {e}");
+            return;
+        }
+    };
 
     while let Some(rst_event) = evt_stream.next().await {
-        if rst_event.is_err() {
-            // we had some kind of error in the event stream
-            continue;
-        }
-
-        if let Some(tfm) = filter(rst_event.unwrap()) {
-            if let Err(SendError(failed_event)) = tx.send(tfm).await {
-                println!(
-                    "[forward_events_stream]: ERROR: failed to forward event {:?} to channel!",
-                    failed_event
-                );
+        match rst_event {
+            Ok(new_event) => {
+                if let Some(tfm) = filter(new_event.clone()) {
+                    if let Err(e) = tx.send(tfm).await {
+                        event!(Level::WARN, "[broadcast_filter_events_stream]: ERROR: failed to forward event to channel with error {e}");
+                    } else {
+                        // we successfully forwarded something over the channel
+                        event!(Level::TRACE, "[broadcast_filter_events_stream]: successfully forwarded event to channel");
+                    }
+                } else {
+                    // we don't need to forward anything to the channel
+                    event!(Level::TRACE, "[broadcast_filter_events_stream]: received event that didn't match filter");
+                }
             }
+            Err(e) => event!(Level::WARN, "[broadcast_filter_events_stream]: new event generated error {e}"), // are these fatal???
         }
     }
+    event!(Level::WARN, "[broadcast_filter_events_stream]: event stream ended");
 }
 
 #[inline]
@@ -205,20 +228,31 @@ async fn flume_events_stream<
     <M as Middleware>::Provider: PubsubClient,
 {
     let event = contract.event::<E>();
-    let mut evt_stream = event.subscribe().await.unwrap();
+    let mut evt_stream = match event.subscribe().await {
+        Ok(evt_stream) => {
+            event!(Level::TRACE, "[flume_events_stream]: subscribed to event stream");
+            evt_stream
+        },
+        Err(e) => {
+            event!(Level::ERROR, "[flume_events_stream]: failed to subscribe to event stream with error {e}");
+            return;
+        }
+    };
 
     while let Some(rst_event) = evt_stream.next().await {
         match rst_event {
             Ok(new_event) => {
-                if let Err(e) = tx.send(new_event.clone()) {
-                    println!(
-                        "[forward_events_stream]: ERROR: failed to forward event to channel with error {e}"
-                    );
+                if let Err(e) = tx.send(new_event) {
+                    event!(Level::WARN, "[flume_events_stream]: ERROR: failed to forward event to channel with error {e}");
+                } else {
+                    // we successfully forwarded something over the channel
+                    event!(Level::TRACE, "[flume_events_stream]: successfully forwarded event to channel");
                 }
             }
-            Err(e) => println!("[forward_events_stream]: new event generated error {e}"), // are these fatal???
+            Err(e) => event!(Level::WARN, "[flume_events_stream]: new event generated error {e}"), // are these fatal???
         }
     }
+    event!(Level::WARN, "[flume_events_stream]: event stream ended");
 }
 
 #[inline]
@@ -236,20 +270,34 @@ async fn flume_filter_events_stream<
     <M as Middleware>::Provider: PubsubClient,
 {
     let event = contract.event::<E>();
-    let mut evt_stream = event.subscribe().await.unwrap();
+    let mut evt_stream = match event.subscribe().await {
+        Ok(evt_stream) => {
+            event!(Level::TRACE, "[flume_filter_events_stream]: subscribed to event stream");
+            evt_stream
+        },
+        Err(e) => {
+            event!(Level::ERROR, "[flume_filter_events_stream]: failed to subscribe to event stream with error {e}");
+            return;
+        }
+    };
 
     while let Some(rst_event) = evt_stream.next().await {
         match rst_event {
             Ok(new_event) => {
                 if let Some(tfm) = filter(new_event.clone()) {
                     if let Err(e) = tx.send(tfm) {
-                        println!(
-                            "[forward_events_stream]: ERROR: failed to forward event to channel with error {e}"
-                        );
+                        event!(Level::WARN, "[flume_filter_events_stream]: ERROR: failed to forward event to channel with error {e}");
+                    } else {
+                        // we successfully forwarded something over the channel
+                        event!(Level::TRACE, "[flume_filter_events_stream]: successfully forwarded event to channel");
                     }
+                } else {
+                    // we don't need to forward anything to the channel
+                    event!(Level::TRACE, "[flume_filter_events_stream]: received event that didn't match filter");
                 }
             }
-            Err(e) => println!("[forward_events_stream]: new event generated error {e}"), // are these fatal???
+            Err(e) => event!(Level::WARN, "[flume_filter_events_stream]: new event generated error {e}"), // are these fatal???
         }
     }
+    event!(Level::WARN, "[flume_filter_events_stream]: event stream ended");
 }
