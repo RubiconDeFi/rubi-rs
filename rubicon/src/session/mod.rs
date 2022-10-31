@@ -10,7 +10,7 @@ use ethers::{
 use numeraire::prelude::*;
 
 use std::convert::Into;
-
+use tracing::{instrument, Level, event};
 use std::sync::Arc;
 
 #[cfg(feature = "streaming")]
@@ -88,6 +88,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// Changes the provider of the [`RubiconSession`].
     /// This may be useful to you if your provider endpoint goes down, and you want to switch to a backup on the fly.
+    #[instrument(level="info", skip(self))]
     fn change_provider(&mut self, provider: M) {
         let a = Arc::new(provider);
 
@@ -171,6 +172,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// This is a market buy, where we spend no more than max_fill_amount to buy buy_amt
     /// the returned value is the fill amount
+    #[instrument(level="debug", skip(self))]
     pub fn buy_all_amount(
         &self,
         buy_gem: Address,
@@ -178,7 +180,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         pay_gem: Address,
         max_fill_amount: U256,
     ) -> Result<ContractCall<M, U256>> {
-        println!("entering buy_all_amount_v2");
         let tx = match self.is_legacy() {
             true => self
                 .market()
@@ -193,6 +194,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// This is a market sell, where we spend pay_amt to buy as much as possible of buy_gem (and we get *at least* min_fill_amount)
     /// the returned value is the filled amount
+    #[instrument(level="debug", skip(self))]
     pub fn sell_all_amount(
         &self,
         pay_gem: Address,
@@ -218,6 +220,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// This is used to construct a limit order, where we want to sell `pay_amt` of `pay_gem` for at least `buy_amt` of `buy_gem`.
     /// The `pos` parameter should be `None` unless you know the new position of the order in the sorted orderbook.
+    #[instrument(level="debug", skip(self))]
     pub fn offer(
         &self,
         pay_amt: U256,
@@ -246,6 +249,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     /// Cancels an order that's already on the Rubicon book
+    #[instrument(level="debug", skip(self))]
     pub fn cancel(&self, order_id: U256) -> Result<ContractCall<M, U256>> {
         let tx = if self.is_legacy() {
             self.market()
@@ -260,6 +264,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // RUBICON BATH HOUSE FUNCTIONS
     /// Strategists have to be approved by the Rubicon protocol before they can place market making trades with pooled funds.
     /// This function returns true if the current middleware is an approved strategist.
+    #[instrument(level="debug", skip(self))]
     pub async fn self_is_approved_strategist(&self) -> Result<bool> {
         self.is_approved_strategist(
             self.get_address()
@@ -270,6 +275,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// Strategists have to be approved by the Rubicon protocol before they can place market making trades with pooled funds.
     /// This function returns true if the supplied address is an approved strategist.
+    #[instrument(level="debug", skip(self))]
     pub async fn is_approved_strategist(&self, addr: Address) -> Result<bool> {
         let receipt = self
             .bath_house()
@@ -304,6 +310,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// Trades are placed in pairs - a bid and an ask.
     /// `ask_num` and `ask_den` are the numerator and denominator of the ask price, respectively. The same is true of the bid.
     /// `token_pair` is of the form [base, quote], where `base != quote`.
+    #[instrument(level="debug", skip(self))]
     pub fn place_market_making_trades(
         &self,
         token_pair: [Address; 2],
@@ -330,6 +337,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // INCOMPLETE: shouldn't this return a vector of Order IDs?
     /// This returns a [`ContractCall`] that will place a series of paired market making trades.
+    #[instrument(level="debug", skip(self))]
     pub fn batch_place_market_making_trades(
         &self,
         token_pair: [Address; 2],
@@ -366,6 +374,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // token_pair is of the form [base, quote]
     // this has no output
     /// This returns a [`ContractCall`] that requotes the given pair of orders.
+    #[instrument(level="debug", skip(self))]
     pub fn requote_offers(
         &self,
         order_id: U256,
@@ -396,6 +405,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     // token_pair is of the form [base, quote]
     // this has no output
     /** This returns a [`ContractCall`] that requotes a series of paired strategist orders. */
+    #[instrument(level="debug", skip(self))]
     pub fn batch_requote_offers(
         &self,
         ids: Vec<U256>,
@@ -429,6 +439,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     /** This returns a [`ContractCall`] that cancels an outstanding strategist orders. */
+    #[instrument(level="debug", skip(self))]
     pub fn scrub_strategist_trade(&self, trade_id: U256) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
@@ -444,6 +455,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // doesn't have any output
     /** This returns a [`ContractCall`] that cancels a list of outstanding strategist orders.  */
+    #[instrument(level="debug", skip(self))]
     pub fn scrub_strategist_trades(&self, trade_ids: Vec<U256>) -> Result<ContractCall<M, ()>> {
         let tx = match self.is_legacy() {
             true => self
@@ -459,6 +471,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // in an old ethers rust UV3 project, I used a u32 for the fee type......
     // let's fucking hope this works
+    #[instrument(level="debug", skip(self))]
     pub fn tailoff(
         &self,
         target_pool: Address,
@@ -502,6 +515,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     // doesn't have any output
+    #[instrument(level="debug", skip(self))]
     pub fn tailoff_multi(
         &self,
         target_pool: Address,
@@ -528,6 +542,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     }
 
     // this has no output
+    #[instrument(level="debug", skip(self))]
     pub fn rebalance_pair(
         &self,
         asset_rebal_amt: U256,
@@ -563,7 +578,8 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // MarketAid functions
     // first, the raw functions, later, the helper functions
-    /// Returns a Result on a Vector of trade IDs.
+    /// Returns a Result on a Vector of trade IDs. This will error out if the Market Aid contract is not set (i.e. it will always error out on OP Kovan and OP Goerli).
+    #[instrument(level="debug", skip(self))]
     pub async fn get_outstanding_strategist_trades(
         &self,
         asset: Address,
@@ -590,6 +606,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// 1. all local to the same chain
     /// 2. that that chain is the same as the session chain
     /// 3. that the bids and asks are all conjugate in the same way (i.e. all bids are QUOTE->BASE and all bids are BASE->QUOTE)
+    #[instrument(level="trace", skip_all)]
     fn local_and_conjugate_rst(&self, bids: &[AssetSwap], asks: &[AssetSwap]) -> Result<()> {
         // now, we go assert that all the bids and asks are local to a single chain
         if !bids.iter().map(|x| x.is_local_to_chain()).all(|x| x) {
@@ -684,46 +701,51 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     ///     println!("Something went wrong!");
     /// }
     /// ```
+    #[instrument(level="debug", skip(self))]
     pub async fn pair_get_historical_events<E: EthEvent>(
         &self,
-        oldest_block: Option<impl Into<BlockNumber>>,
-        newest_block: Option<impl Into<BlockNumber>>,
+        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
+        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
     ) -> Result<Vec<E>> {
         get_historical_events::<_, E>(self.pair(), oldest_block, newest_block).await
     }
 
     /// This pulls historical event data from the RubiconMarket contract.
+    #[instrument(level="debug", skip(self))]
     pub async fn market_get_historical_events<E: EthEvent>(
         &self,
-        oldest_block: Option<impl Into<BlockNumber>>,
-        newest_block: Option<impl Into<BlockNumber>>,
+        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
+        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
     ) -> Result<Vec<E>> {
         get_historical_events::<_, E>(self.market(), oldest_block, newest_block).await
     }
 
     /// This pulls historical event data from the BathHouse contract.
+    #[instrument(level="debug", skip(self))]
     pub async fn bath_house_get_historical_events<E: EthEvent>(
         &self,
-        oldest_block: Option<impl Into<BlockNumber>>,
-        newest_block: Option<impl Into<BlockNumber>>,
+        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
+        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
     ) -> Result<Vec<E>> {
         get_historical_events::<_, E>(self.bath_house(), oldest_block, newest_block).await
     }
 
     /// This pulls historical event data from the Router contract.
+    #[instrument(level="debug", skip(self))]
     pub async fn router_get_historical_events<E: EthEvent>(
         &self,
-        oldest_block: Option<impl Into<BlockNumber>>,
-        newest_block: Option<impl Into<BlockNumber>>,
+        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
+        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
     ) -> Result<Vec<E>> {
         get_historical_events::<_, E>(self.router(), oldest_block, newest_block).await
     }
 
     /// This pulls historical event data from the MarketAid contract.
+    #[instrument(level="debug", skip(self))]
     pub async fn market_aid_get_historical_events<E: EthEvent>(
         &self,
-        oldest_block: Option<impl Into<BlockNumber>>,
-        newest_block: Option<impl Into<BlockNumber>>,
+        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
+        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
     ) -> Result<Vec<E>> {
         get_historical_events::<_, E>(
             self.market_aid().ok_or(anyhow!(
@@ -737,10 +759,11 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 }
 
 // some event helper functions
+#[instrument(level="trace", skip(contract))]
 async fn get_historical_events<M: Middleware + 'static, E: EthEvent>(
     contract: &Contract<M>,
-    start: Option<impl Into<BlockNumber>>,
-    end: Option<impl Into<BlockNumber>>,
+    start: Option<impl Into<BlockNumber> + std::fmt::Debug>,
+    end: Option<impl Into<BlockNumber> + std::fmt::Debug>,
 ) -> Result<Vec<E>> {
     let event = contract.event::<E>();
     let query = match (start, end) {

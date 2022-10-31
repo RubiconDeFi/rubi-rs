@@ -35,13 +35,12 @@ Documentation for `rbcn-rs` can be found on Crates.io. Documentation for the Rub
 - [ ] API-Wrapped Rubicon v1.3 Pair support
 - [x] API-Wrapped Rubicon v1.3 BathHouse support
 - [x] Full event streaming/broadcasting support for Rubicon v1.3 events
+- [x] Full [tracing](https://github.com/tokio-rs/tracing) support
 
 ### Future
 
 - [x] ERC-20 support
-- [ ] Full [tracing](https://github.com/tokio-rs/tracing) support
 - [ ] Uniswap V3 support
-
 
 ## Versioning
 
