@@ -1,3 +1,4 @@
+#![cfg(feature = "aid")]
 #![allow(dead_code)]
 use anyhow::Result;
 use ethers::{abi::Abi, contract::Contract, core::types::Address, providers::Middleware};

@@ -9,7 +9,7 @@ use ethers::{
     providers::Middleware,
 };
 use std::sync::Arc;
-use tracing::{instrument, Level, event};
+use tracing::{event, instrument, Level};
 
 /**
  * This represents an ERC-20 token living on chain. It implements the IERC-20 specification from [OpenZeppelin](https://docs.openzeppelin.com/contracts/2.x/api/token/erc20#IERC20)
@@ -57,7 +57,7 @@ impl<M: Middleware + 'static> Token<M> {
     // IERC-20 function implementations
 
     /// Returns the amount of tokens in existence. This function is a View function.
-    #[instrument(level="debug", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub async fn total_supply(&self) -> Result<U256> {
         Ok(self
             .contract()
@@ -67,7 +67,7 @@ impl<M: Middleware + 'static> Token<M> {
     }
 
     /// Returns the amount of tokens owned by `account`. This function is a View function.
-    #[instrument(level="debug", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub async fn balance_of(&self, account: Address) -> Result<U256> {
         Ok(self
             .contract()
@@ -77,7 +77,7 @@ impl<M: Middleware + 'static> Token<M> {
     }
 
     /// Returns a contract call that transfers `amount` of tokens from the caller's account to the `receiver`'s account. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs.
-    #[instrument(level="debug", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn transfer(&self, receiver: Address, amount: U256) -> Result<ContractCall<M, bool>> {
         let mut tx = self
             .contract()
@@ -89,7 +89,7 @@ impl<M: Middleware + 'static> Token<M> {
     }
 
     /// Returns the amount of `owner`'s tokens that `spender` is allowed to spend. This function is a View function.
-    #[instrument(level="debug", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub async fn allowance(&self, owner: Address, spender: Address) -> Result<U256> {
         Ok(self
             .contract()
@@ -99,7 +99,7 @@ impl<M: Middleware + 'static> Token<M> {
     }
 
     /// Returns a contract call that sets `amount` as the allowance of `spender` of the caller's tokens. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs.
-    #[instrument(level="debug", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn approve(&self, spender: Address, amount: U256) -> Result<ContractCall<M, bool>> {
         let mut tx = self.coin.method("approve", (spender, amount))?;
         if self.is_legacy() {
@@ -109,7 +109,7 @@ impl<M: Middleware + 'static> Token<M> {
     }
 
     /// Returns a contract call that transfers `amount` of tokens from `sender` to `receiver` using the allowance mechanism. It is the user's responsibility to execute the contract call with either the methods provided in ethers-rs.
-    #[instrument(level="debug", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn transfer_from(
         &self,
         from: Address,
