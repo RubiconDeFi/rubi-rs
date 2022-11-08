@@ -11,7 +11,7 @@ use numeraire::prelude::*;
 
 use std::convert::Into;
 use std::sync::Arc;
-use tracing::{event, instrument, Level};
+use tracing::instrument;
 
 #[cfg(feature = "streaming")]
 mod streaming;
@@ -58,7 +58,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         }
     }
 
-    /// Creates a new [`RubiconSession`] configured to Optimism Kovan. OP Kovan is now considered obsolete. 
+    /// Creates a new [`RubiconSession`] configured to Optimism Kovan. OP Kovan is now considered obsolete.
     /// This requires that the `aid` feature is not set - the Market Aid contract is not deployed on OP Kovan.
     #[cfg(not(feature = "aid"))]
     pub fn new_kovan(client: M) -> Self {
@@ -287,6 +287,9 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
             .await?;
         Ok(receipt)
     }
+
+    // now, some wrapper functions for the above
+    pub fn market_buy() {}
 
     // RUBICON BATH PAIR FUNCTIONS
 
@@ -591,11 +594,10 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         strategist: Address,
     ) -> Result<Vec<U256>> {
         let ctr = self.market_aid();
-        Ok(
-            ctr.method::<_, Vec<U256>>("getOutstandingStrategistTrades", (asset, quote, strategist))?
-                .call()
-                .await?,
-        )
+        Ok(ctr
+            .method::<_, Vec<U256>>("getOutstandingStrategistTrades", (asset, quote, strategist))?
+            .call()
+            .await?)
     }
 
     // UTILITY FUNCTIONS AND WHATNOT
