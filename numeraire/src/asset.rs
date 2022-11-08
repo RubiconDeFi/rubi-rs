@@ -15,7 +15,6 @@ pub enum Asset {
     Usdt,
     Weth,
     Wbtc,
-    Eth,
     Dai,
     Snx,
     Op,
@@ -41,7 +40,6 @@ impl Asset {
             Asset::Usdt => Some(6),
             Asset::Weth => Some(18),
             Asset::Wbtc => Some(8),
-            Asset::Eth => Some(18),
             Asset::Dai => Some(18),
             Asset::Snx => Some(18),
             Asset::Op => Some(18),
@@ -58,7 +56,7 @@ impl Asset {
                 Asset::Dai => Ok("DA10009cBd5D07dd0CeCc66161FC93D7c9000da1"),
                 Asset::Snx => Ok("8700dAec35aF8Ff88c16BdF0418774CB3D7599B4"),
                 Asset::Op => Ok("4200000000000000000000000000000000000042"),
-                _ => asset_address_err(chain, self),
+                // _ => asset_address_err(chain, self), // unreachable, for now...
             },
             Chain::OptimismKovan => match &self {
                 Asset::Dai => Ok("Eb22F82de678852B8dff065768490B881DD0116a"),
