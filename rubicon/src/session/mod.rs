@@ -144,6 +144,10 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         self.chain().is_legacy()
     }
 
+    // let's add in some builders for numeraire::ChainNativeAsset
+    // just to make it easier to build those things, since they need to be pinned to the same chain as the session
+
+
     // RUBICON MARKET FUNCTIONS
 
     // first, we have the raw functions that interact with the contracts on chain
@@ -221,6 +225,38 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok(tx)
     }
 
+    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()` 
+    /// in exchange for some undetermined amount `target`
+    #[instrument(level = "debug", skip(self))]
+    pub fn market_sell(&self, source: &ChainNativeAsset, target: &Asset) -> Result<ContractCall<M, U256>> {
+        if source.chain() != self.chain() {
+            return Err(anyhow!("[market_sell]: source chain does not match session chain! ({}!={})", source.chain(), self.chain()));
+        } else {
+            self.sell_all_amount(
+                source.address()?,
+                source.size().clone(),
+                target.to_address(self.chain())?,
+                U256::zero(),
+            )
+        }
+    }
+
+    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()` 
+    /// in exchange for some undetermined amount `target`
+    #[instrument(level = "debug", skip(self))]
+    pub fn market_buy(&self, source: &Asset, target: &ChainNativeAsset) -> Result<ContractCall<M, U256>> {
+        if target.chain() != self.chain() {
+            return Err(anyhow!("[market_sell]: target chain does not match session chain! ({}!={})", target.chain(), self.chain()));
+        } else {
+            self.buy_all_amount(
+                target.address()?,
+                target.size().clone(),
+                source.to_address(self.chain())?,
+                U256::MAX,
+            )
+        }
+    }
+
     /// This is used to construct a limit order, where we want to sell `pay_amt` of `pay_gem` for at least `buy_amt` of `buy_gem`.
     /// The `pos` parameter should be `None` unless you know the new position of the order in the sorted orderbook.
     #[instrument(level = "debug", skip(self))]
@@ -287,9 +323,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
             .await?;
         Ok(receipt)
     }
-
-    // now, some wrapper functions for the above
-    pub fn market_buy() {}
 
     // RUBICON BATH PAIR FUNCTIONS
 
