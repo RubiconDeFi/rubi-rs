@@ -37,7 +37,6 @@ pub mod events;
 #[cfg(feature = "ierc20")]
 pub mod ierc20;
 pub mod session;
-
 pub use session::*;
 
 pub mod prelude {
@@ -45,4 +44,5 @@ pub mod prelude {
     #[cfg(feature = "ierc20")]
     pub use super::ierc20::*;
     pub use super::session::*;
+    pub use numeraire::prelude::*;
 }
