@@ -75,9 +75,9 @@ pub struct LogMake {
     maker: [u8; 32],
     pay_gem: Address,
     buy_gem: Address,
-    pay_amt: U128,
-    buy_amt: U128,
-    timestamp: U64,
+    pay_amt: u128,
+    buy_amt: u128,
+    timestamp: [u64;1],
 }
 
 impl LogMake {
