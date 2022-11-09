@@ -305,11 +305,11 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         }
     }
 
-    pub fn extract_log_makes(receipt: &TransactionReceipt) -> Vec<LogMake> {
+    pub fn extract_log_makes(&self, receipt: &TransactionReceipt) -> Vec<LogMake> {
         extract_events::<LogMake>(receipt)
     }
 
-    pub fn extract_order_ids(receipt: &TransactionReceipt) -> Vec<U256> {
+    pub fn extract_order_ids(&self, receipt: &TransactionReceipt) -> Vec<U256> {
         extract_events::<LogMake>(receipt)
             .iter()
             .map(|log| log.id())
