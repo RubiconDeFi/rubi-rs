@@ -255,12 +255,20 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         Ok(tx)
     }
 
-    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()` 
+    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()`
     /// in exchange for some undetermined amount `target`
     #[instrument(level = "debug", skip(self))]
-    pub fn market_sell(&self, source: &ChainNativeAsset, target: &Asset) -> Result<ContractCall<M, U256>> {
+    pub fn market_sell(
+        &self,
+        source: &ChainNativeAsset,
+        target: &Asset,
+    ) -> Result<ContractCall<M, U256>> {
         if source.chain() != self.chain() {
-            return Err(anyhow!("[market_sell]: source chain does not match session chain! ({}!={})", source.chain(), self.chain()));
+            return Err(anyhow!(
+                "[market_sell]: source chain does not match session chain! ({}!={})",
+                source.chain(),
+                self.chain()
+            ));
         } else {
             self.sell_all_amount(
                 source.address()?,
@@ -271,12 +279,20 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         }
     }
 
-    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()` 
+    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()`
     /// in exchange for some undetermined amount `target`
     #[instrument(level = "debug", skip(self))]
-    pub fn market_buy(&self, source: &Asset, target: &ChainNativeAsset) -> Result<ContractCall<M, U256>> {
+    pub fn market_buy(
+        &self,
+        source: &Asset,
+        target: &ChainNativeAsset,
+    ) -> Result<ContractCall<M, U256>> {
         if target.chain() != self.chain() {
-            return Err(anyhow!("[market_sell]: target chain does not match session chain! ({}!={})", target.chain(), self.chain()));
+            return Err(anyhow!(
+                "[market_sell]: target chain does not match session chain! ({}!={})",
+                target.chain(),
+                self.chain()
+            ));
         } else {
             self.buy_all_amount(
                 target.address()?,
