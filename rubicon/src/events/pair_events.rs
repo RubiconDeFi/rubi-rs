@@ -1,7 +1,8 @@
 use ethers::contract::EthEvent;
 use ethers::core::types::{Address, U256};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogStrategistTrade {
     #[ethevent(name = "strategistTradeID")]
     strategist_trade_id: U256,
@@ -17,7 +18,7 @@ pub struct LogStrategistTrade {
     strategist: Address,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogScrubbedStratTrade {
     #[ethevent(name = "strategistIDScrubbed")]
     strategist_id_scrubbed: U256,
@@ -35,7 +36,7 @@ pub struct LogScrubbedStratTrade {
     both_quote_address: Address,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogStrategistRewardClaim {
     strategist: Address,
     asset: Address,
@@ -44,13 +45,13 @@ pub struct LogStrategistRewardClaim {
     timestamp: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogBatchRequoteOffers {
     strategist: Address,
     trades: Vec<U256>, // presumably, these are IDs?
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogTailOffv0 {
     strategist: Address,
     #[ethevent(name = "targetPool")]
@@ -65,7 +66,7 @@ pub struct LogTailOffv0 {
     input_amount: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogTailOffMultiv0 {
     strategist: Address,
     #[ethevent(name = "targetPool")]
@@ -76,7 +77,7 @@ pub struct LogTailOffMultiv0 {
     input_amount: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogRebalancePair {
     strategist: Address,
     #[ethevent(name = "underlyingAsset")]

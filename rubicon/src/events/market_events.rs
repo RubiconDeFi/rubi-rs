@@ -1,61 +1,61 @@
 use ethers::contract::EthEvent;
 use ethers::core::types::{Address, U256};
-
+use serde::{Deserialize, Serialize};
 // first, we do the matching events
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogBuyEnabled {
     #[ethevent(name = "isEnabled")]
     is_enabled: bool,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogMinSell {
     pay_gem: Address,
     min_amount: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogMatchingEnabled {
     #[ethevent(name = "isEnabled")]
     is_enabled: bool,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogUnsortedOffer {
     id: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogSortedOffer {
     id: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogInsert {
     keeper: Address,
     id: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogDelete {
     keeper: Address,
     id: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogMatch {
     id: U256,
     amount: U256,
 }
 
 // now, we go do the eventful market events
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogItemUpdate {
     id: U256,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogTrade {
     pay_amt: U256,
     #[ethevent(indexed)]
@@ -65,7 +65,7 @@ pub struct LogTrade {
     buy_gem: Address,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogMake {
     #[ethevent(indexed)]
     id: [u8; 32],
@@ -92,7 +92,7 @@ impl LogMake {
     pub fn pair() {}
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogBump {
     #[ethevent(indexed)]
     id: [u8; 32],
@@ -107,7 +107,7 @@ pub struct LogBump {
     timestamp: u64,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogTake {
     #[ethevent(indexed)]
     id: [u8; 32],
@@ -124,7 +124,7 @@ pub struct LogTake {
     timestamp: u64,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogKill {
     #[ethevent(indexed)]
     id: [u8; 32],
@@ -146,7 +146,7 @@ pub struct LogKill {
 //     uint256 input
 // };
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct FeeTake {
     #[ethevent(indexed)]
     id: [u8; 32],
@@ -162,7 +162,7 @@ pub struct FeeTake {
     timestamp: u64,
 }
 
-#[derive(Clone, Debug, EthEvent)]
+#[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct OfferDeleted {
     #[ethevent(indexed)]
     id: [u8; 32],
