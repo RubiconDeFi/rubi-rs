@@ -8,7 +8,7 @@ use ethers::{
     providers::Middleware,
 };
 use numeraire::prelude::*;
-
+use rust_decimal::Decimal;
 use std::convert::Into;
 use std::sync::Arc;
 use tracing::instrument;
@@ -146,7 +146,37 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // let's add in some builders for numeraire::ChainNativeAsset
     // just to make it easier to build those things, since they need to be pinned to the same chain as the session
+    /// Returns a [`ChainNativeAsset`] localized to the current chain.
+    pub fn local_asset(&self, asset: Asset, size: U256) -> Result<ChainNativeAsset> {
+        ChainNativeAsset::new(*self.chain(), asset, size)
+    }
 
+    /// Returns a [`ChainNativeAsset`] localized to the current chain, with size equal to zero.
+    pub fn local_zero_asset(&self, asset: Asset) -> Result<ChainNativeAsset> {
+        ChainNativeAsset::new_zero(*self.chain(), asset)
+    }
+
+    /// Returns a [`ChainNativeAsset`] localized to the current chain, with size equal to 2^256-1.
+    pub fn local_max_asset(&self, asset: Asset) -> Result<ChainNativeAsset> {
+        ChainNativeAsset::new_max(*self.chain(), asset)
+    }
+
+    /// Returns a [`ChainNativeAsset`] localized to the current chain. `size` is human readable, and is converted to wei behind the scenes.
+    pub fn local_asset_human_decimal(
+        &self,
+        asset: Asset,
+        human_size: Decimal,
+    ) -> Result<ChainNativeAsset> {
+        ChainNativeAsset::from_human_decimal(*self.chain(), asset, human_size)
+    }
+
+    pub fn local_asset_string<T: ToString>(
+        &self,
+        asset: Asset,
+        human_size: &T,
+    ) -> Result<ChainNativeAsset> {
+        ChainNativeAsset::from_human_string(*self.chain(), asset, human_size)
+    }
 
     // RUBICON MARKET FUNCTIONS
 
