@@ -1,5 +1,5 @@
 use ethers::contract::EthEvent;
-use ethers::core::types::{Address, U256};
+use ethers::core::types::{Address, U256, U128, U64};
 use serde::{Deserialize, Serialize};
 // first, we do the matching events
 
@@ -75,9 +75,9 @@ pub struct LogMake {
     maker: [u8; 32],
     pay_gem: Address,
     buy_gem: Address,
-    pay_amt: u128,
-    buy_amt: u128,
-    timestamp: u64,
+    pay_amt: U128,
+    buy_amt: U128,
+    timestamp: U64,
 }
 
 impl LogMake {
@@ -104,7 +104,7 @@ pub struct LogBump {
     buy_gem: Address,
     pay_amt: u128,
     buy_amt: u128,
-    timestamp: u64,
+    timestamp: [u64;1],
 }
 
 #[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
