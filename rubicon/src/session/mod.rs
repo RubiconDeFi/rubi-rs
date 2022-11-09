@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 pub use ethers::prelude::builders::ContractCall;
 use ethers::{
     contract::Contract,
-    core::types::{Address, BlockNumber, Chain, U256},
+    core::types::{TransactionReceipt, Address, BlockNumber, Chain, U256},
     prelude::EthEvent,
     providers::Middleware,
 };
@@ -12,6 +12,7 @@ use rust_decimal::Decimal;
 use std::convert::Into;
 use std::sync::Arc;
 use tracing::instrument;
+use super::events::*;
 
 #[cfg(feature = "streaming")]
 mod streaming;
@@ -161,7 +162,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ChainNativeAsset::new_max(*self.chain(), asset)
     }
 
-    /// Returns a [`ChainNativeAsset`] localized to the current chain. `size` is human readable, and is converted to wei behind the scenes.
+    /// Returns a [`ChainNativeAsset`] localized to the current chain. `human_size` is human readable, and is converted to wei behind the scenes.
     pub fn local_asset_human_decimal(
         &self,
         asset: Asset,
@@ -170,6 +171,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         ChainNativeAsset::from_human_decimal(*self.chain(), asset, human_size)
     }
 
+    /// Returns a [`ChainNativeAsset`] localized to the current chain. `human_size` is human readable, and is converted to wei behind the scenes.
     pub fn local_asset_string<T: ToString>(
         &self,
         asset: Asset,
@@ -303,6 +305,17 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         }
     }
 
+    pub fn extract_log_makes(receipt: &TransactionReceipt) -> Vec<LogMake> {
+        extract_events::<LogMake>(receipt)
+    }
+
+    pub fn extract_order_ids(receipt: &TransactionReceipt) -> Vec<U256> {
+        extract_events::<LogMake>(receipt)
+            .iter()
+            .map(|log| log.id())
+            .collect()
+    }
+
     /// This is used to construct a limit order, where we want to sell `pay_amt` of `pay_gem` for at least `buy_amt` of `buy_gem`.
     /// The `pos` parameter should be `None` unless you know the new position of the order in the sorted orderbook.
     /// `pay_gem` and `buy_gem` must not be equal.
@@ -345,6 +358,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// This constructs a limit order transaction.
     /// We want to sell `source.size()` of `source.asset()` for at least `target.size()` of `target.asset()`.
     /// `source.asset()` and `target.asset()` must not be equal.
+    #[instrument(level = "debug", skip(self))]
     pub fn limit_order_bins(
         &self,
         source: &ChainNativeAsset,
@@ -363,6 +377,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// We sell `base_size` worth of `base` for `quote`, at a price greater than or equal to `price`.
     /// `price` has units `quote/base`. Both `price` and `base_size` are in human readable units, not wei.
     /// `base` and `quote` must not be equal.
+    #[instrument(level = "debug", skip(self))]
     pub fn limit_sell(&self, base: &Asset, quote: &Asset, price: Decimal, base_size: Decimal) -> Result<ContractCall<M, U256>> {
         // what's the equivalent quote size?
         let quote_size = base_size*price;
@@ -375,6 +390,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// We buy `base_size` worth of `base` for `quote`, at a price less than or equal to `price`.
     /// `price` has units `quote/base`. Both `price` and `base_size` are in human readable units, not wei.
     /// `base` and `quote` must not be equal.
+    #[instrument(level = "debug", skip(self))]
     pub fn limit_buy(&self, base: &Asset, quote: &Asset, price: Decimal, base_size: Decimal) -> Result<ContractCall<M, U256>> {
         // what's the equivalent quote size?
         let quote_size = base_size*price;
@@ -387,6 +403,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// We want to sell `quute_size` worth of `quote` for `base`, at a price greater than or equal to `price`.
     /// `price` has units `quote/base`. Both `price` and `quote_size` are in human readable units, not wei.
     /// `base` and `quote` must not be equal.
+    #[instrument(level = "debug", skip(self))]
     pub fn conj_limit_sell(&self, base: &Asset, quote: &Asset, price: Decimal, quote_size: Decimal) -> Result<ContractCall<M, U256>> {
         // what's the equivalent base size?
         let base_size = quote_size/price;
@@ -398,6 +415,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
     /// We want to buy `quute_size` worth of `quote` for `base`, at a price less than or equal to `price`.
     /// `price` has units `quote/base`. Both `price` and `quote_size` are in human readable units, not wei.
     /// `base` and `quote` must not be equal.
+    #[instrument(level = "debug", skip(self))]
     pub fn conj_limit_buy(&self, base: &Asset, quote: &Asset, price: Decimal, quote_size: Decimal) -> Result<ContractCall<M, U256>> {
         // what's the equivalent base size?
         let base_size = quote_size/price;

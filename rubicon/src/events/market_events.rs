@@ -80,6 +80,18 @@ pub struct LogMake {
     timestamp: u64,
 }
 
+impl LogMake {
+    pub fn id(&self) -> U256 {
+        U256::from_big_endian(&self.id)
+    }
+
+    pub fn maker_address(&self) -> Address {
+        Address::from_slice(&self.maker[12..])
+    }
+
+    pub fn pair() {}
+}
+
 #[derive(Clone, Debug, EthEvent)]
 pub struct LogBump {
     #[ethevent(indexed)]
