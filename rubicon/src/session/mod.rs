@@ -305,6 +305,7 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     /// This is used to construct a limit order, where we want to sell `pay_amt` of `pay_gem` for at least `buy_amt` of `buy_gem`.
     /// The `pos` parameter should be `None` unless you know the new position of the order in the sorted orderbook.
+    /// `pay_gem` and `buy_gem` must not be equal.
     #[instrument(level = "debug", skip(self))]
     pub fn offer(
         &self,
@@ -314,6 +315,14 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
         buy_gem: Address,
         pos: Option<U256>,
     ) -> Result<ContractCall<M, U256>> {
+        if pay_gem == buy_gem {
+            // we can't sell `x` for `x`
+            return Err(anyhow!(
+                "[offer]: pay_gem and buy_gem are the same! ({}=={})",
+                pay_gem,
+                buy_gem
+            ));
+        }
         let internal_position = pos.unwrap_or(U256::zero());
 
         let tx = if self.is_legacy() {
@@ -332,6 +341,71 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
         Ok(tx)
     }
+
+    /// This constructs a limit order transaction.
+    /// We want to sell `source.size()` of `source.asset()` for at least `target.size()` of `target.asset()`.
+    /// `source.asset()` and `target.asset()` must not be equal.
+    pub fn limit_order_bins(
+        &self,
+        source: &ChainNativeAsset,
+        target: &ChainNativeAsset,
+    ) -> Result<ContractCall<M, U256>> {
+        self.offer(
+            *source.size(),
+            source.address()?,
+            *target.size(),
+            target.address()?,
+            None,
+        )
+    }
+
+    /// This constructs a limit order transaction.
+    /// We sell `base_size` worth of `base` for `quote`, at a price greater than or equal to `price`.
+    /// `price` has units `quote/base`. Both `price` and `base_size` are in human readable units, not wei.
+    /// `base` and `quote` must not be equal.
+    pub fn limit_sell(&self, base: &Asset, quote: &Asset, price: Decimal, base_size: Decimal) -> Result<ContractCall<M, U256>> {
+        // what's the equivalent quote size?
+        let quote_size = base_size*price;
+        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
+        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
+        self.limit_order_bins(&base_bin, &quote_bin)
+    }
+
+    /// This constructs a limit order transaction.
+    /// We buy `base_size` worth of `base` for `quote`, at a price less than or equal to `price`.
+    /// `price` has units `quote/base`. Both `price` and `base_size` are in human readable units, not wei.
+    /// `base` and `quote` must not be equal.
+    pub fn limit_buy(&self, base: &Asset, quote: &Asset, price: Decimal, base_size: Decimal) -> Result<ContractCall<M, U256>> {
+        // what's the equivalent quote size?
+        let quote_size = base_size*price;
+        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
+        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
+        self.limit_order_bins(&quote_bin, &base_bin)
+    }
+
+    /// This constructs a limit order transaction.
+    /// We want to sell `quute_size` worth of `quote` for `base`, at a price greater than or equal to `price`.
+    /// `price` has units `quote/base`. Both `price` and `quote_size` are in human readable units, not wei.
+    /// `base` and `quote` must not be equal.
+    pub fn conj_limit_sell(&self, base: &Asset, quote: &Asset, price: Decimal, quote_size: Decimal) -> Result<ContractCall<M, U256>> {
+        // what's the equivalent base size?
+        let base_size = quote_size/price;
+        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
+        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
+        self.limit_order_bins(&quote_bin, &base_bin)
+    }
+    /// This constructs a limit order transaction.
+    /// We want to buy `quute_size` worth of `quote` for `base`, at a price less than or equal to `price`.
+    /// `price` has units `quote/base`. Both `price` and `quote_size` are in human readable units, not wei.
+    /// `base` and `quote` must not be equal.
+    pub fn conj_limit_buy(&self, base: &Asset, quote: &Asset, price: Decimal, quote_size: Decimal) -> Result<ContractCall<M, U256>> {
+        // what's the equivalent base size?
+        let base_size = quote_size/price;
+        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
+        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
+        self.limit_order_bins(&base_bin, &quote_bin)
+    }
+
 
     /// Cancels an order that's already on the Rubicon book
     #[instrument(level = "debug", skip(self))]
