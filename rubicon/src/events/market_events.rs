@@ -75,8 +75,8 @@ pub struct LogMake {
     maker: [u8; 32],
     pay_gem: Address,
     buy_gem: Address,
-    pay_amt: u128,
-    buy_amt: u128,
+    pay_amt: [u64;2],
+    buy_amt: [u64;2],
     timestamp: [u64;1],
 }
 
