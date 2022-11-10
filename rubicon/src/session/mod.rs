@@ -1,21 +1,17 @@
 use anyhow::{anyhow, Result};
 
-use super::events::*;
 pub use ethers::prelude::builders::ContractCall;
 use ethers::{
     contract::Contract,
-    core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
-    prelude::EthEvent,
+    core::types::{Address, Chain, U256},
     providers::Middleware,
     signers::Signer,
     middleware::SignerMiddleware,
 };
 use numeraire::prelude::*;
 use rust_decimal::Decimal;
-use std::convert::Into;
-use std::sync::Arc;
 use tracing::instrument;
-
+use std::sync::Arc; 
 // #[cfg(feature = "streaming")]
 // mod streaming;
 

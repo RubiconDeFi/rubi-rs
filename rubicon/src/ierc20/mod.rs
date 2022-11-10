@@ -9,7 +9,7 @@ use ethers::{
     providers::Middleware,
 };
 use std::sync::Arc;
-use tracing::{event, instrument, Level};
+use tracing::{instrument};
 
 /**
  * This represents an ERC-20 token living on chain. It implements the IERC-20 specification from [OpenZeppelin](https://docs.openzeppelin.com/contracts/2.x/api/token/erc20#IERC20)

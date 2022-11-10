@@ -1,5 +1,5 @@
 use ethers::contract::EthEvent;
-use ethers::core::types::{Address, U128, U256, U64};
+use ethers::core::types::{Address, U256};
 use serde::{Deserialize, Serialize};
 // first, we do the matching events
 
