@@ -20,13 +20,9 @@ anyhow = { workspace=true }
 hex = { workspace=true }
 futures = { workspace=true }
 rust_decimal = { workspace=true }
-# optional - they are only used in streaming
-postage = { workspace=true, optional=true }
-flume = { workspace=true, optional=true }
 
 [features]
 default = []
-full = ["streaming", "ierc20"]
-streaming = ["postage", "flume"]
+full = ["ierc20"]
 aid = []
 ierc20 = []

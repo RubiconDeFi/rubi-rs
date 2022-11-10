@@ -1,5 +1,5 @@
 use ethers::contract::EthEvent;
-use ethers::core::types::{Address, U256, U128, U64};
+use ethers::core::types::{Address, U128, U256, U64};
 use serde::{Deserialize, Serialize};
 // first, we do the matching events
 
@@ -26,6 +26,7 @@ pub struct LogUnsortedOffer {
     id: U256,
 }
 
+// VALIDATED
 #[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogSortedOffer {
     id: U256,
@@ -50,11 +51,13 @@ pub struct LogMatch {
 }
 
 // now, we go do the eventful market events
+// VALIDATED
 #[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogItemUpdate {
     id: U256,
 }
 
+// VALIDATED
 #[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
 pub struct LogTrade {
     pay_amt: U256,
@@ -65,56 +68,49 @@ pub struct LogTrade {
     buy_gem: Address,
 }
 
+// sig needs to be 0x773ff502687307abfa024ac9f62f9752a0d210dac2ffd9a29e38e12e2ea82c82
 #[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
+#[ethevent(signature = "773ff502687307abfa024ac9f62f9752a0d210dac2ffd9a29e38e12e2ea82c82")]
+//#[ethevent(abi="LogMake(bytes32,bytes32,address,address,address,uint128,uint128,uint64)")]
 pub struct LogMake {
     #[ethevent(indexed)]
-    id: [u8; 32],
+    id: U256,
     #[ethevent(indexed)]
     pair: [u8; 32],
     #[ethevent(indexed)]
-    maker: [u8; 32],
+    maker: Address,
     pay_gem: Address,
     buy_gem: Address,
-    pay_amt: [u64;2],
-    buy_amt: [u64;2],
-    timestamp: [u64;1],
-}
-
-impl LogMake {
-    pub fn id(&self) -> U256 {
-        U256::from_big_endian(&self.id)
-    }
-
-    pub fn maker_address(&self) -> Address {
-        Address::from_slice(&self.maker[12..])
-    }
-
-    pub fn pair() {}
+    pay_amt: u128,
+    buy_amt: u128,
+    timestamp: u64,
 }
 
 #[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
+#[ethevent(abi = "LogBump(bytes32,bytes32,address,address,address,uint128,uint128,uint64)")]
 pub struct LogBump {
     #[ethevent(indexed)]
     id: [u8; 32],
     #[ethevent(indexed)]
     pair: [u8; 32],
     #[ethevent(indexed)]
-    maker: [u8; 32],
+    maker: Address,
     pay_gem: Address,
     buy_gem: Address,
     pay_amt: u128,
     buy_amt: u128,
-    timestamp: [u64;1],
+    timestamp: u64,
 }
 
 #[derive(Clone, Debug, EthEvent, Deserialize, Serialize)]
+#[ethevent(signature = "3383e3357c77fd2e3a4b30deea81179bc70a795d053d14d5b7f2f01d0fd4596f")]
 pub struct LogTake {
     #[ethevent(indexed)]
     id: [u8; 32],
     #[ethevent(indexed)]
     pair: [u8; 32],
     #[ethevent(indexed)]
-    maker: [u8; 32],
+    maker: Address,
     pay_gem: Address,
     buy_gem: Address,
     #[ethevent(indexed)]
@@ -131,7 +127,7 @@ pub struct LogKill {
     #[ethevent(indexed)]
     pair: [u8; 32],
     #[ethevent(indexed)]
-    maker: [u8; 32],
+    maker: Address,
     pay_gem: Address,
     buy_gem: Address,
     pay_amt: u128,

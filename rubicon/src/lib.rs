@@ -30,7 +30,6 @@
 //!
 //! - `full`: enables all features
 //! - `ierc20`: enables the [`ierc20`] module, and the [`ierc20::Token`] struct that comes with it
-//! - `streaming`: allows you to asynchronously stream events from the blockchain, and foward them to either a [`postage::broadcast`] channel or a [`flume`] channel. This requires an [`ethers::providers::PubsubClient`] enabled provider (typically via WebSockets)
 
 mod contracts;
 pub mod events;

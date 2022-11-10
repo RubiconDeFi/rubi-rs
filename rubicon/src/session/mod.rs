@@ -1,21 +1,23 @@
 use anyhow::{anyhow, Result};
 
+use super::events::*;
 pub use ethers::prelude::builders::ContractCall;
 use ethers::{
     contract::Contract,
-    core::types::{TransactionReceipt, Address, BlockNumber, Chain, U256},
+    core::types::{Address, BlockNumber, Chain, TransactionReceipt, U256},
     prelude::EthEvent,
     providers::Middleware,
+    signers::Signer,
+    middleware::SignerMiddleware,
 };
 use numeraire::prelude::*;
 use rust_decimal::Decimal;
 use std::convert::Into;
 use std::sync::Arc;
 use tracing::instrument;
-use super::events::*;
 
-#[cfg(feature = "streaming")]
-mod streaming;
+// #[cfg(feature = "streaming")]
+// mod streaming;
 
 /*
  * TRACING METHODOLOGY:
@@ -41,6 +43,12 @@ pub struct RubiconSession<M: Middleware + Clone + 'static> {
     router: Contract<M>,
     _internal_middleware: Arc<M>, // we just keep this around to clone if we build new contracts
 }
+
+/**
+*  impl<M: Middleware + Clone + 'static> RubiconSession<M>
+   where
+       <M as Middleware>::Provider: PubsubClient,
+*/
 
 #[allow(dead_code)]
 impl<M: Middleware + Clone + 'static> RubiconSession<M> {
@@ -184,260 +192,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
     // first, we have the raw functions that interact with the contracts on chain
 
-    /*
-     * List of all Market functions:
-     * - bump
-     * - buy
-     * - buyAllAmount //
-     * - cancel //
-     * - del_rank
-     * - initialize
-     * - kill
-     * - make
-     * - offer //
-     * - offer //
-     * - offer //
-     * - sellAllAmount //
-     * - setAqueductAddress
-     * - setAqueductDistributionLive
-     * - setBuyEnabled
-     * - setFeeBPS
-     * - setFeeTo
-     * - setMinSell
-     * - setOwner
-     * - stop
-     * - take
-     */
-
-    /// This is a market buy, where we spend no more than max_fill_amount to buy buy_amt
-    /// the returned value is the fill amount
-    #[instrument(level = "debug", skip(self))]
-    pub fn buy_all_amount(
-        &self,
-        buy_gem: Address,
-        buy_amt: U256,
-        pay_gem: Address,
-        max_fill_amount: U256,
-    ) -> Result<ContractCall<M, U256>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .market()
-                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?
-                .legacy(),
-            false => self
-                .market()
-                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?,
-        };
-        Ok(tx)
-    }
-
-    /// This is a market sell, where we spend pay_amt to buy as much as possible of buy_gem (and we get *at least* min_fill_amount)
-    /// the returned value is the filled amount
-    #[instrument(level = "debug", skip(self))]
-    pub fn sell_all_amount(
-        &self,
-        pay_gem: Address,
-        pay_amt: U256,
-        buy_gem: Address,
-        min_fill_amount: U256,
-    ) -> Result<ContractCall<M, U256>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .market()
-                .method::<_, U256>(
-                    "sellAllAmount",
-                    (pay_gem, pay_amt, buy_gem, min_fill_amount),
-                )?
-                .legacy(),
-            false => self.market().method::<_, U256>(
-                "sellAllAmount",
-                (pay_gem, pay_amt, buy_gem, min_fill_amount),
-            )?,
-        };
-        Ok(tx)
-    }
-
-    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()`
-    /// in exchange for some undetermined amount `target`
-    #[instrument(level = "debug", skip(self))]
-    pub fn market_sell(
-        &self,
-        source: &ChainNativeAsset,
-        target: &Asset,
-    ) -> Result<ContractCall<M, U256>> {
-        if source.chain() != self.chain() {
-            return Err(anyhow!(
-                "[market_sell]: source chain does not match session chain! ({}!={})",
-                source.chain(),
-                self.chain()
-            ));
-        } else {
-            self.sell_all_amount(
-                source.address()?,
-                source.size().clone(),
-                target.to_address(self.chain())?,
-                U256::zero(),
-            )
-        }
-    }
-
-    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()`
-    /// in exchange for some undetermined amount `target`
-    #[instrument(level = "debug", skip(self))]
-    pub fn market_buy(
-        &self,
-        source: &Asset,
-        target: &ChainNativeAsset,
-    ) -> Result<ContractCall<M, U256>> {
-        if target.chain() != self.chain() {
-            return Err(anyhow!(
-                "[market_sell]: target chain does not match session chain! ({}!={})",
-                target.chain(),
-                self.chain()
-            ));
-        } else {
-            self.buy_all_amount(
-                target.address()?,
-                target.size().clone(),
-                source.to_address(self.chain())?,
-                U256::MAX,
-            )
-        }
-    }
-
-    pub fn extract_log_makes(&self, receipt: &TransactionReceipt) -> Vec<LogMake> {
-        extract_events::<LogMake>(receipt)
-    }
-
-    pub fn extract_order_ids(&self, receipt: &TransactionReceipt) -> Vec<U256> {
-        extract_events::<LogMake>(receipt)
-            .iter()
-            .map(|log| log.id())
-            .collect()
-    }
-
-    /// This is used to construct a limit order, where we want to sell `pay_amt` of `pay_gem` for at least `buy_amt` of `buy_gem`.
-    /// The `pos` parameter should be `None` unless you know the new position of the order in the sorted orderbook.
-    /// `pay_gem` and `buy_gem` must not be equal.
-    #[instrument(level = "debug", skip(self))]
-    pub fn offer(
-        &self,
-        pay_amt: U256,
-        pay_gem: Address,
-        buy_amt: U256,
-        buy_gem: Address,
-        pos: Option<U256>,
-    ) -> Result<ContractCall<M, U256>> {
-        if pay_gem == buy_gem {
-            // we can't sell `x` for `x`
-            return Err(anyhow!(
-                "[offer]: pay_gem and buy_gem are the same! ({}=={})",
-                pay_gem,
-                buy_gem
-            ));
-        }
-        let internal_position = pos.unwrap_or(U256::zero());
-
-        let tx = if self.is_legacy() {
-            self.market()
-                .method::<_, U256>(
-                    "offer",
-                    (pay_amt, pay_gem, buy_amt, buy_gem, internal_position),
-                )?
-                .legacy()
-        } else {
-            self.market().method::<_, U256>(
-                "offer",
-                (pay_amt, pay_gem, buy_amt, buy_gem, internal_position),
-            )?
-        };
-
-        Ok(tx)
-    }
-
-    /// This constructs a limit order transaction.
-    /// We want to sell `source.size()` of `source.asset()` for at least `target.size()` of `target.asset()`.
-    /// `source.asset()` and `target.asset()` must not be equal.
-    #[instrument(level = "debug", skip(self))]
-    pub fn limit_order_bins(
-        &self,
-        source: &ChainNativeAsset,
-        target: &ChainNativeAsset,
-    ) -> Result<ContractCall<M, U256>> {
-        self.offer(
-            *source.size(),
-            source.address()?,
-            *target.size(),
-            target.address()?,
-            None,
-        )
-    }
-
-    /// This constructs a limit order transaction.
-    /// We sell `base_size` worth of `base` for `quote`, at a price greater than or equal to `price`.
-    /// `price` has units `quote/base`. Both `price` and `base_size` are in human readable units, not wei.
-    /// `base` and `quote` must not be equal.
-    #[instrument(level = "debug", skip(self))]
-    pub fn limit_sell(&self, base: &Asset, quote: &Asset, price: Decimal, base_size: Decimal) -> Result<ContractCall<M, U256>> {
-        // what's the equivalent quote size?
-        let quote_size = base_size*price;
-        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
-        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
-        self.limit_order_bins(&base_bin, &quote_bin)
-    }
-
-    /// This constructs a limit order transaction.
-    /// We buy `base_size` worth of `base` for `quote`, at a price less than or equal to `price`.
-    /// `price` has units `quote/base`. Both `price` and `base_size` are in human readable units, not wei.
-    /// `base` and `quote` must not be equal.
-    #[instrument(level = "debug", skip(self))]
-    pub fn limit_buy(&self, base: &Asset, quote: &Asset, price: Decimal, base_size: Decimal) -> Result<ContractCall<M, U256>> {
-        // what's the equivalent quote size?
-        let quote_size = base_size*price;
-        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
-        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
-        self.limit_order_bins(&quote_bin, &base_bin)
-    }
-
-    /// This constructs a limit order transaction.
-    /// We want to sell `quute_size` worth of `quote` for `base`, at a price greater than or equal to `price`.
-    /// `price` has units `quote/base`. Both `price` and `quote_size` are in human readable units, not wei.
-    /// `base` and `quote` must not be equal.
-    #[instrument(level = "debug", skip(self))]
-    pub fn conj_limit_sell(&self, base: &Asset, quote: &Asset, price: Decimal, quote_size: Decimal) -> Result<ContractCall<M, U256>> {
-        // what's the equivalent base size?
-        let base_size = quote_size/price;
-        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
-        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
-        self.limit_order_bins(&quote_bin, &base_bin)
-    }
-    /// This constructs a limit order transaction.
-    /// We want to buy `quute_size` worth of `quote` for `base`, at a price less than or equal to `price`.
-    /// `price` has units `quote/base`. Both `price` and `quote_size` are in human readable units, not wei.
-    /// `base` and `quote` must not be equal.
-    #[instrument(level = "debug", skip(self))]
-    pub fn conj_limit_buy(&self, base: &Asset, quote: &Asset, price: Decimal, quote_size: Decimal) -> Result<ContractCall<M, U256>> {
-        // what's the equivalent base size?
-        let base_size = quote_size/price;
-        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
-        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
-        self.limit_order_bins(&base_bin, &quote_bin)
-    }
-
-
-    /// Cancels an order that's already on the Rubicon book
-    #[instrument(level = "debug", skip(self))]
-    pub fn cancel(&self, order_id: U256) -> Result<ContractCall<M, U256>> {
-        let tx = if self.is_legacy() {
-            self.market()
-                .method::<_, U256>("cancel", (order_id,))?
-                .legacy()
-        } else {
-            self.market().method::<_, U256>("cancel", (order_id,))?
-        };
-        Ok(tx)
-    }
-
     // RUBICON BATH HOUSE FUNCTIONS
     /// Strategists have to be approved by the Rubicon protocol before they can place market making trades with pooled funds.
     /// This function returns true if the current middleware is an approved strategist.
@@ -460,297 +214,6 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
             .call()
             .await?;
         Ok(receipt)
-    }
-
-    // RUBICON BATH PAIR FUNCTIONS
-
-    /*
-     * what functions do we need?
-     * - tail off (DONE)
-     * - tail off multi (DONE)
-     * - batch requote offers (DONE)
-     * - requote a single pair of offers (DONE)
-     * - place market making trades (DONE)
-     * - batch market making trades (DONE except for deser of return...)
-     * - rebalance pair (DONE)
-     * - scrub strategist trade  (DONE)
-     * - scrub strategist orders (DONE)
-     */
-
-    // these are the raw functions for interacting with the chain
-    // they are not meant to be used directly, but rather through the
-    // helper functions below
-    // ask_num is ask_numerator, ask_dem -> ask_denominator
-    // token_pair is of the form [base, quote]
-    // returns a trade ID (U256)
-    /// This is used to place a strategist trade on the market.
-    /// Trades are placed in pairs - a bid and an ask.
-    /// `ask_num` and `ask_den` are the numerator and denominator of the ask price, respectively. The same is true of the bid.
-    /// `token_pair` is of the form [base, quote], where `base != quote`.
-    #[instrument(level = "debug", skip(self))]
-    pub fn place_market_making_trades(
-        &self,
-        token_pair: [Address; 2],
-        ask_num: U256,
-        ask_den: U256,
-        bid_num: U256,
-        bid_den: U256,
-    ) -> Result<ContractCall<M, ()>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .pair()
-                .method::<_, ()>(
-                    "placeMarketMakingTrades",
-                    (token_pair, ask_num, ask_den, bid_num, bid_den),
-                )?
-                .legacy(),
-            false => self.pair().method::<_, ()>(
-                "placeMarketMakingTrades",
-                (token_pair, ask_num, ask_den, bid_num, bid_den),
-            )?,
-        };
-        Ok(tx)
-    }
-
-    // INCOMPLETE: shouldn't this return a vector of Order IDs?
-    /// This returns a [`ContractCall`] that will place a series of paired market making trades.
-    #[instrument(level = "debug", skip(self))]
-    pub fn batch_place_market_making_trades(
-        &self,
-        token_pair: [Address; 2],
-        ask_nums: Vec<U256>,
-        ask_dems: Vec<U256>,
-        bid_nums: Vec<U256>,
-        bid_dems: Vec<U256>,
-    ) -> Result<ContractCall<M, ()>> {
-        if !(ask_nums.len() == ask_dems.len() && bid_nums.len() == bid_dems.len()) {
-            // there's some mismatch in the input values...
-            // we should return an error and log it
-            Err(anyhow!(
-                "[batch_place_market_making_trades]: mismatch in input vectors!"
-            ))
-        } else {
-            let tx = match self.is_legacy() {
-                true => self
-                    .pair()
-                    .method::<_, ()>(
-                        "batchMarketMakingTrades",
-                        (token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
-                    )?
-                    .legacy(),
-                false => self.pair().method::<_, ()>(
-                    "batchMarketMakingTrades",
-                    (token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
-                )?,
-            };
-            Ok(tx)
-        }
-    }
-
-    // requotes a single pair of bid and ask
-    // token_pair is of the form [base, quote]
-    // this has no output
-    /// This returns a [`ContractCall`] that requotes the given pair of orders.
-    #[instrument(level = "debug", skip(self))]
-    pub fn requote_offers(
-        &self,
-        order_id: U256,
-        token_pair: [Address; 2],
-        ask_num: U256,
-        ask_dem: U256,
-        bid_num: U256,
-        bid_dem: U256,
-    ) -> Result<ContractCall<M, ()>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .pair()
-                .method::<_, ()>(
-                    "requote",
-                    (order_id, token_pair, ask_num, ask_dem, bid_num, bid_dem),
-                )?
-                .legacy(),
-            false => self.pair().method::<_, ()>(
-                "requote",
-                (order_id, token_pair, ask_num, ask_dem, bid_num, bid_dem),
-            )?,
-        };
-        Ok(tx)
-    }
-
-    // requotes a series of paired bids and asks
-    // this system operates in pairs - so that the first ask and the first bid share the same id, i think
-    // token_pair is of the form [base, quote]
-    // this has no output
-    /** This returns a [`ContractCall`] that requotes a series of paired strategist orders. */
-    #[instrument(level = "debug", skip(self))]
-    pub fn batch_requote_offers(
-        &self,
-        ids: Vec<U256>,
-        token_pair: [Address; 2],
-        ask_nums: Vec<U256>,
-        ask_dems: Vec<U256>,
-        bid_nums: Vec<U256>,
-        bid_dems: Vec<U256>,
-    ) -> Result<ContractCall<M, ()>> {
-        assert!(
-            !(ask_nums.len() == ask_dems.len()
-                && bid_nums.len() == bid_dems.len()
-                && ask_nums.len() == ids.len())
-        );
-
-        let tx = match self.is_legacy() {
-            true => self
-                .pair()
-                .method::<_, ()>(
-                    "batchRequoteOffers",
-                    (ids, token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
-                )?
-                .legacy(),
-            false => self.pair().method::<_, ()>(
-                "batchRequoteOffers",
-                (ids, token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
-            )?,
-        };
-        Ok(tx)
-    }
-
-    // doesn't have any output
-    /** This returns a [`ContractCall`] that cancels an outstanding strategist orders. */
-    #[instrument(level = "debug", skip(self))]
-    pub fn scrub_strategist_trade(&self, trade_id: U256) -> Result<ContractCall<M, ()>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .pair()
-                .method::<_, ()>("scrubStrategistTrade", trade_id)?
-                .legacy(),
-            false => self
-                .pair()
-                .method::<_, ()>("scrubStrategistTrade", trade_id)?,
-        };
-        Ok(tx)
-    }
-
-    // doesn't have any output
-    /** This returns a [`ContractCall`] that cancels a list of outstanding strategist orders.  */
-    #[instrument(level = "debug", skip(self))]
-    pub fn scrub_strategist_trades(&self, trade_ids: Vec<U256>) -> Result<ContractCall<M, ()>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .pair()
-                .method::<_, ()>("scrubStrategistTrades", trade_ids)?
-                .legacy(),
-            false => self
-                .pair()
-                .method::<_, ()>("scrubStrategistTrades", trade_ids)?,
-        };
-        Ok(tx)
-    }
-
-    // in an old ethers rust UV3 project, I used a u32 for the fee type......
-    // let's fucking hope this works
-    #[instrument(level = "debug", skip(self))]
-    pub fn tailoff(
-        &self,
-        target_pool: Address,
-        token_to_handle: Address,
-        target_token: Address,
-        strat_util: Address,
-        amount: U256,
-        hurdle: U256,
-        pool_fee: u32,
-    ) -> Result<ContractCall<M, ()>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .pair()
-                .method::<_, ()>(
-                    "tailOff",
-                    (
-                        target_pool,
-                        token_to_handle,
-                        target_token,
-                        strat_util,
-                        amount,
-                        hurdle,
-                        pool_fee,
-                    ),
-                )?
-                .legacy(),
-            false => self.pair().method::<_, ()>(
-                "tailOff",
-                (
-                    target_pool,
-                    token_to_handle,
-                    target_token,
-                    strat_util,
-                    amount,
-                    hurdle,
-                    pool_fee,
-                ),
-            )?,
-        };
-        Ok(tx)
-    }
-
-    // doesn't have any output
-    #[instrument(level = "debug", skip(self))]
-    pub fn tailoff_multi(
-        &self,
-        target_pool: Address,
-        amount: U256,
-        assets: Vec<Address>,
-        fees: Vec<u32>,
-        hurdle: U256,
-        strat_util: Address,
-    ) -> Result<ContractCall<M, ()>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .pair()
-                .method::<_, ()>(
-                    "tailOffMulti",
-                    (target_pool, amount, assets, fees, hurdle, strat_util),
-                )?
-                .legacy(),
-            false => self.pair().method::<_, ()>(
-                "tailOffMulti",
-                (target_pool, amount, assets, fees, hurdle, strat_util),
-            )?,
-        };
-        Ok(tx)
-    }
-
-    // this has no output
-    #[instrument(level = "debug", skip(self))]
-    pub fn rebalance_pair(
-        &self,
-        asset_rebal_amt: U256,
-        quote_rebal_amt: U256,
-        underlying_asset: Address,
-        underlying_quote: Address,
-    ) -> Result<ContractCall<M, ()>> {
-        let tx = match self.is_legacy() {
-            true => self
-                .pair()
-                .method::<_, ()>(
-                    "rebalancePair",
-                    (
-                        asset_rebal_amt,
-                        quote_rebal_amt,
-                        underlying_asset,
-                        underlying_quote,
-                    ),
-                )?
-                .legacy(),
-            false => self.pair().method::<_, ()>(
-                "rebalancePair",
-                (
-                    asset_rebal_amt,
-                    quote_rebal_amt,
-                    underlying_asset,
-                    underlying_quote,
-                ),
-            )?,
-        };
-        Ok(tx)
     }
 
     // MarketAid functions
@@ -850,91 +313,565 @@ impl<M: Middleware + Clone + 'static> RubiconSession<M> {
 
         Ok(())
     }
+}
 
-    // let's go work on events and whatnot
-    // basically, for every event type, we want to be able to get historical events (bounded by a block range) and be able to get a stream of these new events as they happen
-    // and maybe as well, we'd want an async fn to take that stream
-    // and broadcast it over a Broadcast channel
-    // and for all these functions, we'd like to be able to optinally apply a filter
+impl<M: Middleware + Clone + 'static, S: Clone + Signer> RubiconSession<SignerMiddleware<M,S>>
+{
+    /*
+     * List of all Market functions:
+     * - bump
+     * - buy
+     * - buyAllAmount //
+     * - cancel //
+     * - del_rank
+     * - initialize
+     * - kill
+     * - make
+     * - offer //
+     * - offer //
+     * - offer //
+     * - sellAllAmount //
+     * - setAqueductAddress
+     * - setAqueductDistributionLive
+     * - setBuyEnabled
+     * - setFeeBPS
+     * - setFeeTo
+     * - setMinSell
+     * - setOwner
+     * - stop
+     * - take
+     */
 
-    // let's handle LogBatchRequoteOffers first
-    // to be perfectly frank, it's probably easier and faster to filter non-block number related stuff in memory after we receive a response
-    // this might be wrong if we're dealing with huge numbers of events, where this might increase network load
-    /// This pulls historical event data from the BathPair contract.
-    /// # Example
-    /// ```
-    /// use rbcn::prelude::*;
-    /// let session: RubiconSession = ...;
-    /// if let Ok(data) = session.pair_get_historical_events::<LogBatchRequoteOffers>(Some(start_block), None).await {
-    ///     println!("Here are some historical requotes: {:?}", &data);
-    /// } else {
-    ///     println!("Something went wrong!");
-    /// }
-    /// ```
+    /// This is a market buy, where we spend no more than max_fill_amount to buy buy_amt
+    /// the returned value is the fill amount
     #[instrument(level = "debug", skip(self))]
-    pub async fn pair_get_historical_events<E: EthEvent>(
+    pub fn buy_all_amount(
         &self,
-        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-    ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(self.pair(), oldest_block, newest_block).await
+        buy_gem: Address,
+        buy_amt: U256,
+        pay_gem: Address,
+        max_fill_amount: U256,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .market()
+                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?
+                .legacy(),
+            false => self
+                .market()
+                .method::<_, U256>("buyAllAmount", (buy_gem, buy_amt, pay_gem, max_fill_amount))?,
+        };
+        Ok(tx)
     }
 
-    /// This pulls historical event data from the RubiconMarket contract.
+    /// This is a market sell, where we spend pay_amt to buy as much as possible of buy_gem (and we get *at least* min_fill_amount)
+    /// the returned value is the filled amount
     #[instrument(level = "debug", skip(self))]
-    pub async fn market_get_historical_events<E: EthEvent>(
+    pub fn sell_all_amount(
         &self,
-        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-    ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(self.market(), oldest_block, newest_block).await
+        pay_gem: Address,
+        pay_amt: U256,
+        buy_gem: Address,
+        min_fill_amount: U256,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .market()
+                .method::<_, U256>(
+                    "sellAllAmount",
+                    (pay_gem, pay_amt, buy_gem, min_fill_amount),
+                )?
+                .legacy(),
+            false => self.market().method::<_, U256>(
+                "sellAllAmount",
+                (pay_gem, pay_amt, buy_gem, min_fill_amount),
+            )?,
+        };
+        Ok(tx)
     }
 
-    /// This pulls historical event data from the BathHouse contract.
+    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()`
+    /// in exchange for some undetermined amount `target`
     #[instrument(level = "debug", skip(self))]
-    pub async fn bath_house_get_historical_events<E: EthEvent>(
+    pub fn market_sell(
         &self,
-        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-    ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(self.bath_house(), oldest_block, newest_block).await
+        source: &ChainNativeAsset,
+        target: &Asset,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        if source.chain() != self.chain() {
+            return Err(anyhow!(
+                "[market_sell]: source chain does not match session chain! ({}!={})",
+                source.chain(),
+                self.chain()
+            ));
+        } else {
+            self.sell_all_amount(
+                source.address()?,
+                source.size().clone(),
+                target.to_address(self.chain())?,
+                U256::zero(),
+            )
+        }
     }
 
-    /// This pulls historical event data from the Router contract.
+    /// This represents a market sell, where we sell the `source.size()` worth of `source.asset()`
+    /// in exchange for some undetermined amount `target`
     #[instrument(level = "debug", skip(self))]
-    pub async fn router_get_historical_events<E: EthEvent>(
+    pub fn market_buy(
         &self,
-        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-    ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(self.router(), oldest_block, newest_block).await
+        source: &Asset,
+        target: &ChainNativeAsset,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        if target.chain() != self.chain() {
+            return Err(anyhow!(
+                "[market_sell]: target chain does not match session chain! ({}!={})",
+                target.chain(),
+                self.chain()
+            ));
+        } else {
+            self.buy_all_amount(
+                target.address()?,
+                target.size().clone(),
+                source.to_address(self.chain())?,
+                U256::MAX,
+            )
+        }
     }
 
-    /// This pulls historical event data from the MarketAid contract.
+    /// This is used to construct a limit order, where we want to sell `pay_amt` of `pay_gem` for at least `buy_amt` of `buy_gem`.
+    /// The `pos` parameter should be `None` unless you know the new position of the order in the sorted orderbook.
+    /// `pay_gem` and `buy_gem` must not be equal.
     #[instrument(level = "debug", skip(self))]
-    #[cfg(feature = "aid")]
-    pub async fn market_aid_get_historical_events<E: EthEvent>(
+    pub fn offer(
         &self,
-        oldest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-        newest_block: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-    ) -> Result<Vec<E>> {
-        get_historical_events::<_, E>(self.market_aid(), oldest_block, newest_block).await
+        pay_amt: U256,
+        pay_gem: Address,
+        buy_amt: U256,
+        buy_gem: Address,
+        pos: Option<U256>,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        if pay_gem == buy_gem {
+            // we can't sell `x` for `x`
+            return Err(anyhow!(
+                "[offer]: pay_gem and buy_gem are the same! ({}=={})",
+                pay_gem,
+                buy_gem
+            ));
+        }
+        let internal_position = pos.unwrap_or(U256::zero());
+
+        let tx = if self.is_legacy() {
+            self.market()
+                .method::<_, U256>(
+                    "offer",
+                    (pay_amt, pay_gem, buy_amt, buy_gem, internal_position),
+                )?
+                .legacy()
+        } else {
+            self.market().method::<_, U256>(
+                "offer",
+                (pay_amt, pay_gem, buy_amt, buy_gem, internal_position),
+            )?
+        };
+
+        Ok(tx)
+    }
+
+    /// This constructs a limit order transaction.
+    /// We want to sell `source.size()` of `source.asset()` for at least `target.size()` of `target.asset()`.
+    /// `source.asset()` and `target.asset()` must not be equal.
+    #[instrument(level = "debug", skip(self))]
+    pub fn limit_order_bins(
+        &self,
+        source: &ChainNativeAsset,
+        target: &ChainNativeAsset,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        self.offer(
+            *source.size(),
+            source.address()?,
+            *target.size(),
+            target.address()?,
+            None,
+        )
+    }
+
+    /// This constructs a limit order transaction.
+    /// We sell `base_size` worth of `base` for `quote`, at a price greater than or equal to `price`.
+    /// `price` has units `quote/base`. Both `price` and `base_size` are in human readable units, not wei.
+    /// `base` and `quote` must not be equal.
+    #[instrument(level = "debug", skip(self))]
+    pub fn limit_sell(
+        &self,
+        base: &Asset,
+        quote: &Asset,
+        price: Decimal,
+        base_size: Decimal,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        // what's the equivalent quote size?
+        let quote_size = base_size * price;
+        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
+        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
+        self.limit_order_bins(&base_bin, &quote_bin)
+    }
+
+    /// This constructs a limit order transaction.
+    /// We buy `base_size` worth of `base` for `quote`, at a price less than or equal to `price`.
+    /// `price` has units `quote/base`. Both `price` and `base_size` are in human readable units, not wei.
+    /// `base` and `quote` must not be equal.
+    #[instrument(level = "debug", skip(self))]
+    pub fn limit_buy(
+        &self,
+        base: &Asset,
+        quote: &Asset,
+        price: Decimal,
+        base_size: Decimal,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        // what's the equivalent quote size?
+        let quote_size = base_size * price;
+        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
+        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
+        self.limit_order_bins(&quote_bin, &base_bin)
+    }
+
+    /// This constructs a limit order transaction.
+    /// We want to sell `quute_size` worth of `quote` for `base`, at a price greater than or equal to `price`.
+    /// `price` has units `quote/base`. Both `price` and `quote_size` are in human readable units, not wei.
+    /// `base` and `quote` must not be equal.
+    #[instrument(level = "debug", skip(self))]
+    pub fn conj_limit_sell(
+        &self,
+        base: &Asset,
+        quote: &Asset,
+        price: Decimal,
+        quote_size: Decimal,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        // what's the equivalent base size?
+        let base_size = quote_size / price;
+        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
+        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
+        self.limit_order_bins(&quote_bin, &base_bin)
+    }
+    /// This constructs a limit order transaction.
+    /// We want to buy `quute_size` worth of `quote` for `base`, at a price less than or equal to `price`.
+    /// `price` has units `quote/base`. Both `price` and `quote_size` are in human readable units, not wei.
+    /// `base` and `quote` must not be equal.
+    #[instrument(level = "debug", skip(self))]
+    pub fn conj_limit_buy(
+        &self,
+        base: &Asset,
+        quote: &Asset,
+        price: Decimal,
+        quote_size: Decimal,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        // what's the equivalent base size?
+        let base_size = quote_size / price;
+        let base_bin: ChainNativeAsset = self.local_asset_human_decimal(*base, base_size)?;
+        let quote_bin: ChainNativeAsset = self.local_asset_human_decimal(*quote, quote_size)?;
+        self.limit_order_bins(&base_bin, &quote_bin)
+    }
+
+    /// Cancels an order that's already on the Rubicon book
+    #[instrument(level = "debug", skip(self))]
+    pub fn cancel(&self, order_id: U256) -> Result<ContractCall<SignerMiddleware<M,S>, U256>> {
+        let tx = if self.is_legacy() {
+            self.market()
+                .method::<_, U256>("cancel", (order_id,))?
+                .legacy()
+        } else {
+            self.market().method::<_, U256>("cancel", (order_id,))?
+        };
+        Ok(tx)
+    }
+
+    // RUBICON BATH PAIR FUNCTIONS
+
+    /*
+     * what functions do we need?
+     * - tail off (DONE)
+     * - tail off multi (DONE)
+     * - batch requote offers (DONE)
+     * - requote a single pair of offers (DONE)
+     * - place market making trades (DONE)
+     * - batch market making trades (DONE except for deser of return...)
+     * - rebalance pair (DONE)
+     * - scrub strategist trade  (DONE)
+     * - scrub strategist orders (DONE)
+     */
+
+    // these are the raw functions for interacting with the chain
+    // they are not meant to be used directly, but rather through the
+    // helper functions below
+    // ask_num is ask_numerator, ask_dem -> ask_denominator
+    // token_pair is of the form [base, quote]
+    // returns a trade ID (U256)
+    /// This is used to place a strategist trade on the market.
+    /// Trades are placed in pairs - a bid and an ask.
+    /// `ask_num` and `ask_den` are the numerator and denominator of the ask price, respectively. The same is true of the bid.
+    /// `token_pair` is of the form [base, quote], where `base != quote`.
+    #[instrument(level = "debug", skip(self))]
+    pub fn place_market_making_trades(
+        &self,
+        token_pair: [Address; 2],
+        ask_num: U256,
+        ask_den: U256,
+        bid_num: U256,
+        bid_den: U256,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>(
+                    "placeMarketMakingTrades",
+                    (token_pair, ask_num, ask_den, bid_num, bid_den),
+                )?
+                .legacy(),
+            false => self.pair().method::<_, ()>(
+                "placeMarketMakingTrades",
+                (token_pair, ask_num, ask_den, bid_num, bid_den),
+            )?,
+        };
+        Ok(tx)
+    }
+
+    // INCOMPLETE: shouldn't this return a vector of Order IDs?
+    /// This returns a [`ContractCall`] that will place a series of paired market making trades.
+    #[instrument(level = "debug", skip(self))]
+    pub fn batch_place_market_making_trades(
+        &self,
+        token_pair: [Address; 2],
+        ask_nums: Vec<U256>,
+        ask_dems: Vec<U256>,
+        bid_nums: Vec<U256>,
+        bid_dems: Vec<U256>,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        if !(ask_nums.len() == ask_dems.len() && bid_nums.len() == bid_dems.len()) {
+            // there's some mismatch in the input values...
+            // we should return an error and log it
+            Err(anyhow!(
+                "[batch_place_market_making_trades]: mismatch in input vectors!"
+            ))
+        } else {
+            let tx = match self.is_legacy() {
+                true => self
+                    .pair()
+                    .method::<_, ()>(
+                        "batchMarketMakingTrades",
+                        (token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
+                    )?
+                    .legacy(),
+                false => self.pair().method::<_, ()>(
+                    "batchMarketMakingTrades",
+                    (token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
+                )?,
+            };
+            Ok(tx)
+        }
+    }
+
+    // requotes a single pair of bid and ask
+    // token_pair is of the form [base, quote]
+    // this has no output
+    /// This returns a [`ContractCall`] that requotes the given pair of orders.
+    #[instrument(level = "debug", skip(self))]
+    pub fn requote_offers(
+        &self,
+        order_id: U256,
+        token_pair: [Address; 2],
+        ask_num: U256,
+        ask_dem: U256,
+        bid_num: U256,
+        bid_dem: U256,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>(
+                    "requote",
+                    (order_id, token_pair, ask_num, ask_dem, bid_num, bid_dem),
+                )?
+                .legacy(),
+            false => self.pair().method::<_, ()>(
+                "requote",
+                (order_id, token_pair, ask_num, ask_dem, bid_num, bid_dem),
+            )?,
+        };
+        Ok(tx)
+    }
+
+    // requotes a series of paired bids and asks
+    // this system operates in pairs - so that the first ask and the first bid share the same id, i think
+    // token_pair is of the form [base, quote]
+    // this has no output
+    /** This returns a [`ContractCall`] that requotes a series of paired strategist orders. */
+    #[instrument(level = "debug", skip(self))]
+    pub fn batch_requote_offers(
+        &self,
+        ids: Vec<U256>,
+        token_pair: [Address; 2],
+        ask_nums: Vec<U256>,
+        ask_dems: Vec<U256>,
+        bid_nums: Vec<U256>,
+        bid_dems: Vec<U256>,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        assert!(
+            !(ask_nums.len() == ask_dems.len()
+                && bid_nums.len() == bid_dems.len()
+                && ask_nums.len() == ids.len())
+        );
+
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>(
+                    "batchRequoteOffers",
+                    (ids, token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
+                )?
+                .legacy(),
+            false => self.pair().method::<_, ()>(
+                "batchRequoteOffers",
+                (ids, token_pair, ask_nums, ask_dems, bid_nums, bid_dems),
+            )?,
+        };
+        Ok(tx)
+    }
+
+    // doesn't have any output
+    /** This returns a [`ContractCall`] that cancels an outstanding strategist orders. */
+    #[instrument(level = "debug", skip(self))]
+    pub fn scrub_strategist_trade(&self, trade_id: U256) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>("scrubStrategistTrade", trade_id)?
+                .legacy(),
+            false => self
+                .pair()
+                .method::<_, ()>("scrubStrategistTrade", trade_id)?,
+        };
+        Ok(tx)
+    }
+
+    // doesn't have any output
+    /** This returns a [`ContractCall`] that cancels a list of outstanding strategist orders.  */
+    #[instrument(level = "debug", skip(self))]
+    pub fn scrub_strategist_trades(&self, trade_ids: Vec<U256>) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>("scrubStrategistTrades", trade_ids)?
+                .legacy(),
+            false => self
+                .pair()
+                .method::<_, ()>("scrubStrategistTrades", trade_ids)?,
+        };
+        Ok(tx)
+    }
+
+    // in an old ethers rust UV3 project, I used a u32 for the fee type......
+    // let's fucking hope this works
+    #[instrument(level = "debug", skip(self))]
+    pub fn tailoff(
+        &self,
+        target_pool: Address,
+        token_to_handle: Address,
+        target_token: Address,
+        strat_util: Address,
+        amount: U256,
+        hurdle: U256,
+        pool_fee: u32,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>(
+                    "tailOff",
+                    (
+                        target_pool,
+                        token_to_handle,
+                        target_token,
+                        strat_util,
+                        amount,
+                        hurdle,
+                        pool_fee,
+                    ),
+                )?
+                .legacy(),
+            false => self.pair().method::<_, ()>(
+                "tailOff",
+                (
+                    target_pool,
+                    token_to_handle,
+                    target_token,
+                    strat_util,
+                    amount,
+                    hurdle,
+                    pool_fee,
+                ),
+            )?,
+        };
+        Ok(tx)
+    }
+
+    // doesn't have any output
+    #[instrument(level = "debug", skip(self))]
+    pub fn tailoff_multi(
+        &self,
+        target_pool: Address,
+        amount: U256,
+        assets: Vec<Address>,
+        fees: Vec<u32>,
+        hurdle: U256,
+        strat_util: Address,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>(
+                    "tailOffMulti",
+                    (target_pool, amount, assets, fees, hurdle, strat_util),
+                )?
+                .legacy(),
+            false => self.pair().method::<_, ()>(
+                "tailOffMulti",
+                (target_pool, amount, assets, fees, hurdle, strat_util),
+            )?,
+        };
+        Ok(tx)
+    }
+
+    // this has no output
+    #[instrument(level = "debug", skip(self))]
+    pub fn rebalance_pair(
+        &self,
+        asset_rebal_amt: U256,
+        quote_rebal_amt: U256,
+        underlying_asset: Address,
+        underlying_quote: Address,
+    ) -> Result<ContractCall<SignerMiddleware<M,S>, ()>> {
+        let tx = match self.is_legacy() {
+            true => self
+                .pair()
+                .method::<_, ()>(
+                    "rebalancePair",
+                    (
+                        asset_rebal_amt,
+                        quote_rebal_amt,
+                        underlying_asset,
+                        underlying_quote,
+                    ),
+                )?
+                .legacy(),
+            false => self.pair().method::<_, ()>(
+                "rebalancePair",
+                (
+                    asset_rebal_amt,
+                    quote_rebal_amt,
+                    underlying_asset,
+                    underlying_quote,
+                ),
+            )?,
+        };
+        Ok(tx)
     }
 }
 
-// some event helper functions
-#[instrument(level = "trace", skip(contract))]
-async fn get_historical_events<M: Middleware + 'static, E: EthEvent>(
-    contract: &Contract<M>,
-    start: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-    end: Option<impl Into<BlockNumber> + std::fmt::Debug>,
-) -> Result<Vec<E>> {
-    let event = contract.event::<E>();
-    let query = match (start, end) {
-        (Some(lower), Some(upper)) => event.from_block(lower).to_block(upper),
-        (None, Some(upper)) => event.to_block(upper),
-        (Some(lower), None) => event.from_block(lower),
-        (None, None) => event,
-    };
-    Ok(query.query().await?)
-}
