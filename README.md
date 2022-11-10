@@ -1,8 +1,8 @@
-# rbcn-rs
+# rubi-rs
 
 ## Description
 
-`rbcn-rs` is an SDK which allows users to transact on the Rubicon protocol, a limit order book market on [Optimism](https://www.optimism.io/).
+`rubi-rs` is an SDK which allows users to transact on the Rubicon protocol, a limit order book market on [Optimism](https://www.optimism.io/).
 
 ## Risk Disclaimers
 
@@ -16,7 +16,7 @@ Please refer to [this](https://docs.rubicon.finance/rubicon-docs/protocol/rubico
 
 ## Documentation
 
-Documentation for `rbcn-rs` can be found on Crates.io. Documentation for the Rubicon protocol can be found [here](https://docs.rubicon.finance)
+Documentation for `rubi-rs` can be found on Crates.io. Documentation for the Rubicon protocol can be found [here](https://docs.rubicon.finance)
 
 ## Features
 
@@ -32,15 +32,15 @@ Documentation for `rbcn-rs` can be found on Crates.io. Documentation for the Rub
 -   [x] Basic Rubicon v1.3 Market support
 -   [x] Basic Rubicon v1.3 Pair support
 -   [x] Basic Rubicon v1.3 BathHouse support
--   [ ] API-Wrapped Rubicon v1.3 Market support
+-   [x] API-Wrapped Rubicon v1.3 Market support
 -   [ ] API-Wrapped Rubicon v1.3 Pair support
 -   [x] API-Wrapped Rubicon v1.3 BathHouse support
--   [x] Full event streaming/broadcasting support for Rubicon v1.3 events
 -   [x] Full [tracing](https://github.com/tokio-rs/tracing) support
+-   [x] Optional ERC-20 support
 
 ### Future
 
--   [x] ERC-20 support
+-   [ ] Full event streaming/broadcasting support for Rubicon v1.3 events
 -   [ ] Uniswap V3 support
 
 ## Versioning
@@ -49,4 +49,4 @@ This SDK is still in alpha. However, in order to maintain consistency with the R
 
 ## License
 
-`rbcn-rs` is licensed under the Apache License (Version 2.0). See [LICENSE.txt](https://github.com/RubiconDeFi/rbcn-rs/blob/master/LICENSE.txt) for details.
+`rubi-rs` is licensed under the Apache License (Version 2.0). See [LICENSE.txt](https://github.com/RubiconDeFi/rubi-rs/blob/master/LICENSE.txt) for details.
