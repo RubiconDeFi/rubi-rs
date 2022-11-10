@@ -32,15 +32,15 @@ Documentation for `rubi-rs` can be found on Crates.io. Documentation for the Rub
 -   [x] Basic Rubicon v1.3 Market support
 -   [x] Basic Rubicon v1.3 Pair support
 -   [x] Basic Rubicon v1.3 BathHouse support
--   [ ] API-Wrapped Rubicon v1.3 Market support
+-   [x] API-Wrapped Rubicon v1.3 Market support
 -   [ ] API-Wrapped Rubicon v1.3 Pair support
 -   [x] API-Wrapped Rubicon v1.3 BathHouse support
--   [x] Full event streaming/broadcasting support for Rubicon v1.3 events
 -   [x] Full [tracing](https://github.com/tokio-rs/tracing) support
+-   [x] Optional ERC-20 support
 
 ### Future
 
--   [x] ERC-20 support
+-   [ ] Full event streaming/broadcasting support for Rubicon v1.3 events
 -   [ ] Uniswap V3 support
 
 ## Versioning
