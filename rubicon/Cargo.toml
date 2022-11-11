@@ -10,7 +10,7 @@ repository = "https://github.com/RubiconDeFi/rubi-rs"
 
 [dependencies]
 # internal
-#numeraire = { version="*" } 
+numeraire = { version="*" } 
 # external
 ethers = { workspace=true }
 tracing = { workspace=true }
