@@ -2,7 +2,16 @@
 
 ## Description
 
-`rubi-rs` is an SDK which allows users to transact on the Rubicon protocol, a limit order book market on [Optimism](https://www.optimism.io/).
+`rubi-rs` is an SDK which allows users to transact on the [Rubicon](https://rubicon.finance) protocol, a limit order book market on [Optimism](https://www.optimism.io/).
+
+[![Crates.io][crates-badge]][crates-url]
+[![Rayon documentation](https://docs.rs/rubi/badge.svg)](https://docs.rs/rayon)
+[![Discord chat][discord-badge]][discord-url]
+
+[crates-badge]: https://img.shields.io/crates/v/rubi.svg
+[crates-url]: https://crates.io/crates/rubi
+[discord-badge]: https://img.shields.io/discord/752590582274326680.svg?logo=discord&style=flat-square
+[discord-url]: https://discord.com/invite/E7pS24J
 
 ## Risk Disclaimers
 
