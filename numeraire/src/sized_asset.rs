@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 pub use ethers::core::types::{Address, Chain, U256};
 use rust_decimal::prelude::*;
 use std::convert::From;
+use base64::Engine; // encoding engine Trait for base64
 
 #[derive(Debug, Clone)]
 pub struct ChainNativeAsset {
@@ -90,7 +91,7 @@ impl ChainNativeAsset {
     pub fn to_base64_string(&self) -> String {
         let mut bytes = [0_u8; 32];
         self.size().to_little_endian(&mut bytes);
-        base64::encode(bytes)
+        base64::engine::general_purpose::STANDARD.encode(bytes)
     }
 
     /// Represents the size of the asset as a Decimal type.
