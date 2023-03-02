@@ -4,23 +4,6 @@ use anyhow::Result;
 use ethers::{abi::Abi, contract::Contract, core::types::Address, providers::Middleware};
 use std::sync::Arc;
 
-pub fn build_default<M: Middleware>(client: impl Into<Arc<M>>) -> Result<Contract<M>> {
-    let address = "1be63db5051C126f54Ad0807E1B471ad9AA0befD";
-    let hx = hex::decode(address).unwrap();
-    let addr = Address::from_slice(hx.as_slice());
-    build_contract(addr, client)
-}
-
-pub fn build_kovan<M: Middleware>(client: impl Into<Arc<M>>) -> Result<Contract<M>> {
-    let address = "68B5fBd7CEFEE3076e4101920b13C9Cc1A6cbF0e";
-    build_contract_string(address, client)
-}
-
-pub fn build_goerli<M: Middleware>(client: impl Into<Arc<M>>) -> Result<Contract<M>> {
-    let address = "1229036F63679B61910CB1463e5BB57f68D19bb2";
-    build_contract_string(address, client)
-}
-
 fn build_contract_string<M: Middleware, T: ToString>(
     address: T,
     client: impl Into<Arc<M>>,
