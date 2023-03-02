@@ -32,7 +32,7 @@ fn build_contract<M: Middleware>(
     client: impl Into<Arc<M>>,
 ) -> Result<Contract<M>> {
     let abi: Abi = serde_json::from_str(ABI)?;
-    Ok(Contract::new(address, abi, client))
+    Ok(Contract::new(address, abi, client.into()))
 }
 
 const ABI: &str = r#"[
