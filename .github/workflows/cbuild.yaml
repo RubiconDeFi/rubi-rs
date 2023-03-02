@@ -1,0 +1,14 @@
+name: cargo-check
+run-name: cargo check
+on: [push]
+jobs:
+    build_and_test:
+        name: cargo check
+        runs-on: ubuntu-latest
+        steps:
+            # - uses: arduino/setup-protoc@v1
+            - uses: actions/checkout@v2
+            - uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: stable
+            - run: cargo check
