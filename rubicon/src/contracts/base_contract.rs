@@ -1,4 +1,6 @@
+use std::any::Any;
 use ethers::providers::Middleware;
+use ethers::providers::Provider;
 use ethers::signers::Signer;
 // import libraries
 use ethers::{abi::Address, signers::Signer::address};
@@ -21,7 +23,7 @@ pub struct BaseContract {
 // implementation of base contract
 impl BaseContract {
     pub fn new(
-        w3: Provider,
+        w3: Provider<Http>,
         contract: Contract,
         wallet: Option<Address>,
         key: Option<str>,
@@ -29,12 +31,46 @@ impl BaseContract {
             if wallet.is_some() != key.is_some() {
                 return Err(String::from("Both a wallet and a key are required sign txns. Provide both or provide none")) //"Both a wallet and a key are required sign txns. Provide both or provide none".to_owned()
             }
-            let chain_id = w3.get_chainid().await.map_err(|e| e.to_string())?;
+            
+            // I added getter functions for these so they can be used
+            // let chain_id: U256 = w3.get_chainid().await.map_err(|e| e.to_string())?;
+            // let signing_permissions: bool = wallet.is_some() && key.is_some();
+
             Ok(BaseContract{
                 w3,
                 contract,
                 wallet,
-                key
+                key,
             })
         }
+    pub async fn from_address_and_abi(
+        w3: Provider<Http>,
+        address: Address,
+        contract_abi: ethers::contract::Abigen,
+        wallet: Option<Address>,
+        key: Option<str>
+    ) -> Result<Self, String> {
+            if wallet.is_some() != key.is_some() {
+                return Err(String::from("Both a wallet and a key are required sign txns. Provide both or provide none")) //"Both a wallet and a key are required sign txns. Provide both or provide none".to_owned()
+            }
+            
+            let contract: Contract<Provider<Http>> = Contract::new(address, contract_abi, w3.clone()); //unkown provider need to fix that across 
+            let base_contract = Self::new(w3, contract, wallet, key);
+            let signing_permissions: bool = wallet.is_some() && key.is_some();
+            
+            Ok(BaseContract(
+                ..base_contract //struct update syntax allowing to copy remaining fields from an exsiting struct (BaseContract) into a new instance also BaseContract
+                //what about signing permissions
+            )) 
+    }
+
+    //adding this as a local var in `new` or `from_address_and_abi` prob wouldn't let me access it
+    fn _get_signing_permission(&self) -> bool {
+        return self.wallet.is_some() && self.key.is_some();
+    }
+
+    fn _get_chain_id(&self) -> U256 {
+        return self.w3.get_chainid();
+    }
 }
+
