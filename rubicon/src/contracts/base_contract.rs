@@ -1,76 +1,57 @@
-use std::any::Any;
+use ethers::prelude::*;
 use ethers::providers::Middleware;
 use ethers::providers::Provider;
-use ethers::signers::Signer;
-// import libraries
-use ethers::{abi::Address, signers::Signer::address};
-use ethers::prelude::*;
 use ethers::contract::Contract; //this is the import for a contract
 use ethers::core::types::Address; //address type
-use ethers::core::types::Chain; //rust has built in chain IDs
+use ethers::providers::Http;
 
 // Base class representation of a contract that defines the structure of a contract and provides 
 // methods that can be used by Rubicon contracts 
 // Current contracts are erc20, market, and router.
 // Aid support is not available 
-pub struct BaseContract {
-    w3: Provider, //not sure if this is supposed to be middleware. also might need <Http> type? idk
-    contract: Contract, //contract instance 
-    wallet: Option<Address>, //optional signer wallet address
-    key: Option<str> //pk of signer 
+
+//in v1 - M is Middleware + Clone + 'static...why?
+// clone trait used to create multiple independant copies of a value - not adding rn
+
+pub struct BaseRubiContract <M: Middleware> {
+    w3: Provider<Http>,
+    contract: Contract<M>,
+    wallet: Option<Address>,
+    key: Option<String>
 }
 
-// implementation of base contract
-impl BaseContract {
+impl<M: Middleware> BaseRubiContract<M> {
     pub fn new(
-        w3: Provider<Http>,
-        contract: Contract,
+        w3: Provider<M>,
+        contract: Contract<M>,
         wallet: Option<Address>,
-        key: Option<str>,
-    ) -> Result<Self, String> {
-            if wallet.is_some() != key.is_some() {
-                return Err(String::from("Both a wallet and a key are required sign txns. Provide both or provide none")) //"Both a wallet and a key are required sign txns. Provide both or provide none".to_owned()
-            }
-            
-            // I added getter functions for these so they can be used
-            // let chain_id: U256 = w3.get_chainid().await.map_err(|e| e.to_string())?;
-            // let signing_permissions: bool = wallet.is_some() && key.is_some();
-
-            Ok(BaseContract{
-                w3,
-                contract,
-                wallet,
-                key,
-            })
+        key: Option<String>,
+    ) -> Self {
+        if wallet.is_some() != key.is_some() {
+            eprintln!("Both a wallet and a key are required to sign transactions. Provide both or provide none.");
         }
-    pub async fn from_address_and_abi(
-        w3: Provider<Http>,
-        address: Address,
-        contract_abi: ethers::contract::Abigen,
-        wallet: Option<Address>,
-        key: Option<str>
-    ) -> Result<Self, String> {
-            if wallet.is_some() != key.is_some() {
-                return Err(String::from("Both a wallet and a key are required sign txns. Provide both or provide none")) //"Both a wallet and a key are required sign txns. Provide both or provide none".to_owned()
-            }
-            
-            let contract: Contract<Provider<Http>> = Contract::new(address, contract_abi, w3.clone()); //unkown provider need to fix that across 
-            let base_contract = Self::new(w3, contract, wallet, key);
-            let signing_permissions: bool = wallet.is_some() && key.is_some();
-            
-            Ok(BaseContract(
-                ..base_contract //struct update syntax allowing to copy remaining fields from an exsiting struct (BaseContract) into a new instance also BaseContract
-                //what about signing permissions
-            )) 
+        BaseRubiContract { w3: w3, contract: contract, wallet: wallet, key: key}
     }
 
     //adding this as a local var in `new` or `from_address_and_abi` prob wouldn't let me access it
-    fn _get_signing_permission(&self) -> bool {
+    pub fn _get_signing_permission(&self) -> bool {
         return self.wallet.is_some() && self.key.is_some();
     }
 
-    fn _get_chain_id(&self) -> U256 {
-        return self.w3.get_chainid();
+    pub fn _get_chain_id(&self) -> U256 {
+        return self.w3.get_chainid()
+    }
+
+    pub async fn from_address_and_abi(
+        w3: Provider<Http>,
+        address: Address,
+        contract_abi: ethers::abi::Abi,
+        wallet: Option<Address>,
+        key: Option<String>
+    ) -> Result<Self, String> {
+        if wallet.is_some() != key.is_some() {
+            return Err(String::from("Both a wallet and a key are required sign txns. Provide both or provide none")) //"Both a wallet and a key are required sign txns. Provide both or provide none".to_owned()
+        }
+        let contract: Contract<bool> = Contract::new(address, contract_abi, w3);
     }
 }
-
