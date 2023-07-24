@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use ethers::prelude::*;
 use ethers::providers::Middleware;
 use ethers::providers::Provider;
@@ -22,7 +23,7 @@ pub struct BaseRubiContract <M: Middleware> {
 
 impl<M: Middleware> BaseRubiContract<M> {
     pub fn new(
-        w3: Provider<M>,
+        w3: Provider<Http>,
         contract: Contract<M>,
         wallet: Option<Address>,
         key: Option<String>,
@@ -38,8 +39,12 @@ impl<M: Middleware> BaseRubiContract<M> {
         return self.wallet.is_some() && self.key.is_some();
     }
 
-    pub fn _get_chain_id(&self) -> U256 {
-        return self.w3.get_chainid()
+    pub async fn _get_chain_id(&self) -> Result<U256, ProviderError> {
+        let chain_id_result: Result<U256, ProviderError> = self.w3.get_chainid().await;
+        match chain_id_result {
+            Ok(chain_id) => Ok(chain_id),
+            Err(e) => Err(e)
+        }
     }
 
     pub async fn from_address_and_abi(
@@ -47,11 +52,13 @@ impl<M: Middleware> BaseRubiContract<M> {
         address: Address,
         contract_abi: ethers::abi::Abi,
         wallet: Option<Address>,
-        key: Option<String>
-    ) -> Result<Self, String> {
+        key: Option<String>,
+        client: impl Into<Arc<M>>
+    ) -> Self {
         if wallet.is_some() != key.is_some() {
-            return Err(String::from("Both a wallet and a key are required sign txns. Provide both or provide none")) //"Both a wallet and a key are required sign txns. Provide both or provide none".to_owned()
+            eprintln!("Both a wallet and a key are required sign txns. Provide both or provide none"); //"Both a wallet and a key are required sign txns. Provide both or provide none".to_owned()
         }
-        let contract: Contract<bool> = Contract::new(address, contract_abi, w3);
+        let deploy_contract: Contract<M> = Contract::new(address, contract_abi, client);
+        BaseRubiContract{w3, contract: deploy_contract, wallet, key}
     }
 }
